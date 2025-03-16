@@ -4,24 +4,11 @@ output: html_document
 date: ""
 ---
 
+
 ```{r}
 rm(list = ls())
 library(tidyverse)
 library(httr2)
-
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_PAT@DF_PAT,1.0/A.TL3....APPLICATION.PAT.._T.10P6HB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
-# # writeBin(resp_body_raw(data), "data/patent.csv")
-# patent <- read_csv("data/patent.csv", show_col_types = FALSE)
-
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_INC,2.0/A.TL3...B5N+B6N..Q.USD_PPP_PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
-# writeBin(resp_body_raw(data), "data/income.csv")
-# income <- read_csv("data/income.csv", show_col_types = FALSE)
-
-# wildfires (potentially more than 1 variable)
-
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SAFETY,2.2/A.TL3......CS_10P5PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
-# writeBin(resp_body_raw(data), "data/safety.csv")
-# safety <- read_csv("data/safety.csv", show_col_types = FALSE)
 
 # data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...LAND_AREA+POP...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/population.csv")
@@ -39,25 +26,66 @@ migration <- read_csv("data/migration.csv", show_col_types = FALSE)
 # writeBin(resp_body_raw(data), "data/mortality.csv")
 mortality <- read_csv("data/mortality.csv", show_col_types = FALSE)
 
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...MORT_ICDV_CRUDE_RATIO+VEH_THEFT...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/safety.csv")
+safety <- read_csv("data/safety.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...VEH_STOCK_ELECTRIC...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/electric_cars.csv")
+electric_cars <- read_csv("data/electric_cars.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...BB_ACC...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/internet_access.csv")
+internet_access <- read_csv("data/internet_access.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...GDP..Q.USD_PPP_PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/gdp.csv")
+gdp <- read_csv("data/gdp.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...B5N..Q.USD_PPP_PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/income.csv")
+income <- read_csv("data/income.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...LAB_PROD._T.Q.USD_PPP_WR?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/labour_productivity.csv")
+labour_productivity <- read_csv("data/labour_productivity.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...EMP_RATIO.Y15T64._T.PT_POP_SUB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/employment.csv")
+employment <- read_csv("data/employment.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...UNE_RATE.Y15T64._T.PT_LF_SUB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/unemployment.csv")
+unemployment <- read_csv("data/unemployment.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...LF_RATE_SEXDIF.Y15T64._T.PD?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/gender_diff_labour_force_participation.csv")
+gender_diff_labour_force_participation <- read_csv("data/gender_diff_labour_force_participation.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...RF_LAND_EXP+CF_LAND_EXP.Y_20...?startPeriod=2017&endPeriod=2021&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/floodings.csv")
+floodings <- read_csv("data/floodings.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...FIRE_LAND_EXP....PT_LAR?startPeriod=2017&endPeriod=2021&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/wildfires.csv")
+wildfires <- read_csv("data/wildfires.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_CARE,2.0/A.TL3...HB...10P3HB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/hospital_beds.csv")
+hospital_beds <- read_csv("data/hospital_beds.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_RISK,2.0/A.TL3...PM25_POP_EXP+OBESITY...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/health_risks.csv")
+health_risks <- read_csv("data/health_risks.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_PAT@DF_PAT,1.0/A.TL3....APPLICATION.PAT.._T.10P6HB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/patents.csv")
+patents <- read_csv("data/patents.csv", show_col_types = FALSE)
 ```
 
-
+The data has been obtained through talking directly to the OECD API and the written over .csv files to avoid overloading the API. The code with the queries to the API and the writing of the .csv files have been commented, but the code is still available for any future update or for reproducibility. 
 
 ```{r}
-# patent <- patent |> 
-#   select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-# patent |> count(REF_AREA)
-# 
-# income <- income |> 
-#     select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-# income |> filter(Measure == "Primary incomes, net") |> count(REF_AREA)
-# income |> filter(Measure != "Primary incomes, net") |> count(REF_AREA)
-# 
-# safety <- safety |> 
-#     select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-# safety |> filter(Measure == "Mortality from transport accidents") |> count(REF_AREA)
-# safety |> filter(Measure != "Mortality from transport accidents") |> count(REF_AREA)
-
 # Population and area
 population <- population |> 
   select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
@@ -112,5 +140,86 @@ life_expectancy <- mortality |>
   filter(Sex != "Total") |> 
   count(REF_AREA) 
 # Available also various type of deaths such respiratory, circulatory and from transport accidents
+
+# Vehicles thefts
+safety <- safety |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+vehicle_thefts <- safety |> 
+  filter(Measure == "Motor vehicle theft") |> 
+  filter(`Unit of measure`=="Cases per 100 000 persons") 
+vehicle_thefts |> count(REF_AREA)
+# Available also mortality from transport accidents
+
+# Electric cars
+electric_cars <- electric_cars |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+electric_cars |> count(REF_AREA) # needs to be scaled at the population level
+
+# Internet access
+internet_access <- internet_access |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+internet_access |> count(REF_AREA)
+
+# GDP
+gdp <- gdp |>
+    select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+gdp |> count(REF_AREA)
+
+# Primary income
+income <- income |>
+    select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+income |> count(REF_AREA)
+
+# Labour productivity
+labour_productivity <- labour_productivity |>
+    select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+labour_productivity |> count(REF_AREA)
+
+# Employment
+employment <- employment |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+labour_productivity |> count(REF_AREA)
+
+# Unemployment
+unemployment <- unemployment |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+unemployment |> count(REF_AREA)
+
+# Labour force participation rate, gender difference
+gender_diff_labour_force_participation <- gender_diff_labour_force_participation |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+gender_diff_labour_force_participation |> count(REF_AREA)
+
+# River flooding, coastal flooding and wildfires
+floodings <- floodings |>
+        select(REF_AREA, `Reference area`, Measure, `Return period`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+river_flooding <- floodings |>
+  filter(Measure == "Land exposure to river flooding")
+river_flooding |> count(REF_AREA)
+coastal_flooding <- floodings |>
+  filter(Measure == "Land exposure to coastal flooding")
+coastal_flooding |> count(REF_AREA)
+
+# Wildfires
+wildfires <- wildfires |>
+        select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+wildfires |> count(REF_AREA)
+
+# Hospital beds
+hospital_beds <- hospital_beds |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+hospital_beds |> count(REF_AREA)
+
+# Exposure to pollution
+pollution <- health_risks |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country) |> filter(Measure == "Population exposure to PM2.5") 
+pollution |> count(REF_AREA)
+
+# Patents
+patents <- patents |>
+  select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+patents |> count(REF_AREA)
+
+
 ```
 
