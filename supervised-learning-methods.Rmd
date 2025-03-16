@@ -1,0 +1,116 @@
+---
+title: "assignment"
+output: html_document
+date: ""
+---
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(httr2)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_PAT@DF_PAT,1.0/A.TL3....APPLICATION.PAT.._T.10P6HB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# # writeBin(resp_body_raw(data), "data/patent.csv")
+# patent <- read_csv("data/patent.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_INC,2.0/A.TL3...B5N+B6N..Q.USD_PPP_PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/income.csv")
+# income <- read_csv("data/income.csv", show_col_types = FALSE)
+
+# wildfires (potentially more than 1 variable)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SAFETY,2.2/A.TL3......CS_10P5PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/safety.csv")
+# safety <- read_csv("data/safety.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...LAND_AREA+POP...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/population.csv")
+population <- read_csv("data/population.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...DEPEND_RATIO+FERT_RATIO...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/demographic.csv")
+demographic <- read_csv("data/demographic.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...NETMIG+OUTMIG+INMIG+NETMOB+OUTMOB+INMOB...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/migration.csv")
+migration <- read_csv("data/migration.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...MORT_ICDV_CRUDE_RATIO+MORT_ICDI_CRUDE_RATIO+MORT_ICDJ_CRUDE_RATIO+MORT_INFANT+MORT_STANDARD_RATIO+LFEXP...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/mortality.csv")
+mortality <- read_csv("data/mortality.csv", show_col_types = FALSE)
+
+```
+
+
+
+```{r}
+# patent <- patent |> 
+#   select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+# patent |> count(REF_AREA)
+# 
+# income <- income |> 
+#     select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+# income |> filter(Measure == "Primary incomes, net") |> count(REF_AREA)
+# income |> filter(Measure != "Primary incomes, net") |> count(REF_AREA)
+# 
+# safety <- safety |> 
+#     select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+# safety |> filter(Measure == "Mortality from transport accidents") |> count(REF_AREA)
+# safety |> filter(Measure != "Mortality from transport accidents") |> count(REF_AREA)
+
+# Population and area
+population <- population |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+land <- population |> 
+  filter(Measure=="Land area")
+land |> count(REF_AREA)
+population <- population |> 
+  filter(Measure=="Population")
+
+# Fertility rate and age dependency
+demographic <- demographic |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+fertility_rate <- demographic |> filter(Measure=="Fertility rate") |> filter(Age == "Total") 
+fertility_rate |> count(REF_AREA)
+old_dependency_ratio <- demographic |> 
+  filter(Measure=="Dependency ratio") |> 
+  filter(Age == "65 years or over") 
+old_dependency_ratio |> count(REF_AREA)
+
+# Net national and international migration
+migration <- migration |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country) |> 
+  filter(Sex == "Total") |> 
+  filter(Measure %in% c("Net inter-regional mobility (inflows minus outflows)", "Net international migration (inflows minus outflows)"))
+net_youth_national_mobility <- migration |> 
+  filter(Measure == "Net inter-regional mobility (inflows minus outflows)") |>
+  filter(Age == "From 15 to 29 years") |> 
+  filter(`Unit of measure` == "Persons") # needs to be scaled to the population of the region
+net_youth_national_mobility |> count(REF_AREA)
+net_total_national_mobility <- migration |> 
+  filter(Measure == "Net inter-regional mobility (inflows minus outflows)") |>
+  filter(Age == "Total") |> 
+  filter(`Unit of measure` == "Percentage of population")
+net_total_national_mobility |> count(REF_AREA)
+net_total_international_mobility <- migration |> 
+  filter(Measure == "Net international migration (inflows minus outflows)")
+net_total_international_mobility |> count(REF_AREA) # needs to be scaled to the population of the region
+
+# Several measure related with mortality
+mortality <- mortality |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+mortality_rates <- mortality |> 
+  filter(Measure == "Age-adjusted mortality rate") |> 
+  filter(Sex != "Total") # can differentiate between males and females or keep the total
+mortality_rates |> count(REF_AREA) 
+infant_mortality <- mortality |> 
+  filter(Measure == "Infant mortality rate") |> 
+  filter(Sex == "Total") 
+infant_mortality |> count(REF_AREA)
+life_expectancy <- mortality |> 
+  filter(Measure == "Life expectancy") |> 
+  filter(Sex != "Total") |> 
+  count(REF_AREA) 
+# Available also various type of deaths such respiratory, circulatory and from transport accidents
+```
+
