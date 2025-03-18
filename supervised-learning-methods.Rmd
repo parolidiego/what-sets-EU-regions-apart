@@ -1,145 +1,157 @@
 ---
-title: "assignment"
-output: html_document
-date: ""
+title: "Supervised Learning Methods"
+subtitle: "Advanced Modelling 2° Assignment"
+author: "Diego Paroli"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::robobook
 ---
 
+# Project 
 
-```{r}
+...
+
+# Loading libraries
+
+```{r, message=FALSE}
 rm(list = ls())
 library(tidyverse)
 library(httr2)
+library(DataExplorer)
+library(explore)
+library(mice)
+```
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...LAND_AREA+POP...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# Loading data
+
+```{r}
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...LAND_AREA+POP...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/population.csv")
 population <- read_csv("data/population.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...DEPEND_RATIO+FERT_RATIO...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...DEPEND_RATIO+FERT_RATIO...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/demographic.csv")
 demographic <- read_csv("data/demographic.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...NETMIG+OUTMIG+INMIG+NETMOB+OUTMOB+INMOB...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...NETMIG+OUTMIG+INMIG+NETMOB+OUTMOB+INMOB...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/migration.csv")
 migration <- read_csv("data/migration.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...MORT_ICDV_CRUDE_RATIO+MORT_ICDI_CRUDE_RATIO+MORT_ICDJ_CRUDE_RATIO+MORT_INFANT+MORT_STANDARD_RATIO+LFEXP...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...MORT_ICDV_CRUDE_RATIO+MORT_ICDI_CRUDE_RATIO+MORT_ICDJ_CRUDE_RATIO+MORT_INFANT+MORT_STANDARD_RATIO+LFEXP...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/mortality.csv")
 mortality <- read_csv("data/mortality.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...MORT_ICDV_CRUDE_RATIO+VEH_THEFT...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...MORT_ICDV_CRUDE_RATIO+VEH_THEFT...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/safety.csv")
 safety <- read_csv("data/safety.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...VEH_STOCK_ELECTRIC...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...VEH_STOCK_ELECTRIC...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/electric_cars.csv")
 electric_cars <- read_csv("data/electric_cars.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...BB_ACC...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...BB_ACC...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/internet_access.csv")
 internet_access <- read_csv("data/internet_access.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...GDP..Q.USD_PPP_PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...GDP..Q.USD_PPP_PS?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/gdp.csv")
 gdp <- read_csv("data/gdp.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...B5N..Q.USD_PPP_PS?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...B5N..Q.USD_PPP_PS?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/income.csv")
 income <- read_csv("data/income.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...LAB_PROD._T.Q.USD_PPP_WR?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...LAB_PROD._T.Q.USD_PPP_WR?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/labour_productivity.csv")
 labour_productivity <- read_csv("data/labour_productivity.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...EMP_RATIO.Y15T64._T.PT_POP_SUB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...EMP_RATIO.Y15T64._T.PT_POP_SUB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/employment.csv")
 employment <- read_csv("data/employment.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...UNE_RATE.Y15T64._T.PT_LF_SUB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...UNE_RATE.Y15T64._T.PT_LF_SUB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/unemployment.csv")
 unemployment <- read_csv("data/unemployment.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...LF_RATE_SEXDIF.Y15T64._T.PD?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...LF_RATE_SEXDIF.Y15T64._T.PD?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/gender_diff_labour_force_participation.csv")
 gender_diff_labour_force_participation <- read_csv("data/gender_diff_labour_force_participation.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...RF_LAND_EXP+CF_LAND_EXP.Y_20...?startPeriod=2017&endPeriod=2021&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...RF_LAND_EXP+CF_LAND_EXP.Y_20...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/floodings.csv")
 floodings <- read_csv("data/floodings.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...FIRE_LAND_EXP....PT_LAR?startPeriod=2017&endPeriod=2021&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...FIRE_LAND_EXP....PT_LAR?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/wildfires.csv")
 wildfires <- read_csv("data/wildfires.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_CARE,2.0/A.TL3...HB...10P3HB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_CARE,2.0/A.TL3...HB...10P3HB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/hospital_beds.csv")
 hospital_beds <- read_csv("data/hospital_beds.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_RISK,2.0/A.TL3...PM25_POP_EXP+OBESITY...?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_RISK,2.0/A.TL3...PM25_POP_EXP+OBESITY...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/health_risks.csv")
 health_risks <- read_csv("data/health_risks.csv", show_col_types = FALSE)
 
-# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_PAT@DF_PAT,1.0/A.TL3....APPLICATION.PAT.._T.10P6HB?startPeriod=2017&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_PAT@DF_PAT,1.0/A.TL3....APPLICATION.PAT.._T.10P6HB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
 # writeBin(resp_body_raw(data), "data/patents.csv")
 patents <- read_csv("data/patents.csv", show_col_types = FALSE)
 ```
 
-The data has been obtained through talking directly to the OECD API and the written over .csv files to avoid overloading the API. The code with the queries to the API and the writing of the .csv files have been commented, but the code is still available for any future update or for reproducibility. 
+The data has been obtained through talking directly to the OECD API and the written over .csv files to avoid having to recall the API each time. The code with the queries to the API and the writing of the .csv files have been commented, but they remain available for any future update or for reproducibility. 
+
+# Data cleaning
+
+First cleaning of the variables (selecting the relevant age, sex groups and/or relevant units of measure):
 
 ```{r}
-# Population and area
+# Population and population density
 population <- population |> 
   select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-land <- population |> 
-  filter(Measure=="Land area")
-land |> count(REF_AREA)
-population <- population |> 
-  filter(Measure=="Population")
+tot_population <- population |> 
+  filter(Measure=="Population") |> 
+  filter(Age=="Total") |> 
+  filter(Sex=="Total") |> 
+  filter(`Unit of measure`=="Persons")
+pop_density <- population |> 
+  filter(Measure=="Population") |> 
+  filter(Age=="Total") |> 
+  filter(Sex=="Total") |> 
+  filter(`Unit of measure`=="Persons per square kilometer")
 
 # Fertility rate and age dependency
 demographic <- demographic |> 
   select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
 fertility_rate <- demographic |> filter(Measure=="Fertility rate") |> filter(Age == "Total") 
-fertility_rate |> count(REF_AREA)
 old_dependency_ratio <- demographic |> 
   filter(Measure=="Dependency ratio") |> 
-  filter(Age == "65 years or over") 
-old_dependency_ratio |> count(REF_AREA)
+  filter(Age == "65 years or over") |> 
+  filter(`Unit of measure` == "Percentage of population aged 15-64 years")
 
 # Net national and international migration
 migration <- migration |> 
   select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country) |> 
   filter(Sex == "Total") |> 
   filter(Measure %in% c("Net inter-regional mobility (inflows minus outflows)", "Net international migration (inflows minus outflows)"))
-net_youth_national_mobility <- migration |> 
-  filter(Measure == "Net inter-regional mobility (inflows minus outflows)") |>
-  filter(Age == "From 15 to 29 years") |> 
-  filter(`Unit of measure` == "Persons") # needs to be scaled to the population of the region
-net_youth_national_mobility |> count(REF_AREA)
 net_total_national_mobility <- migration |> 
   filter(Measure == "Net inter-regional mobility (inflows minus outflows)") |>
   filter(Age == "Total") |> 
   filter(`Unit of measure` == "Percentage of population")
-net_total_national_mobility |> count(REF_AREA)
 net_total_international_mobility <- migration |> 
   filter(Measure == "Net international migration (inflows minus outflows)")
-net_total_international_mobility |> count(REF_AREA) # needs to be scaled to the population of the region
 
 # Several measure related with mortality
 mortality <- mortality |> 
   select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
 mortality_rates <- mortality |> 
   filter(Measure == "Age-adjusted mortality rate") |> 
-  filter(Sex != "Total") # can differentiate between males and females or keep the total
-mortality_rates |> count(REF_AREA) 
+  filter(Sex == "Total")
 infant_mortality <- mortality |> 
   filter(Measure == "Infant mortality rate") |> 
   filter(Sex == "Total") 
-infant_mortality |> count(REF_AREA)
 life_expectancy <- mortality |> 
   filter(Measure == "Life expectancy") |> 
-  filter(Sex != "Total") |> 
-  count(REF_AREA) 
-# Available also various type of deaths such respiratory, circulatory and from transport accidents
+  filter(Sex == "Total") 
 
 # Vehicles thefts
 safety <- safety |>
@@ -147,79 +159,303 @@ safety <- safety |>
 vehicle_thefts <- safety |> 
   filter(Measure == "Motor vehicle theft") |> 
   filter(`Unit of measure`=="Cases per 100 000 persons") 
-vehicle_thefts |> count(REF_AREA)
-# Available also mortality from transport accidents
 
 # Electric cars
 electric_cars <- electric_cars |>
     select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-electric_cars |> count(REF_AREA) # needs to be scaled at the population level
 
 # Internet access
 internet_access <- internet_access |>
     select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-internet_access |> count(REF_AREA)
 
 # GDP
 gdp <- gdp |>
     select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-gdp |> count(REF_AREA)
 
 # Primary income
 income <- income |>
     select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-income |> count(REF_AREA)
 
 # Labour productivity
 labour_productivity <- labour_productivity |>
     select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-labour_productivity |> count(REF_AREA)
 
 # Employment
 employment <- employment |>
     select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-labour_productivity |> count(REF_AREA)
 
 # Unemployment
 unemployment <- unemployment |>
         select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-unemployment |> count(REF_AREA)
 
 # Labour force participation rate, gender difference
 gender_diff_labour_force_participation <- gender_diff_labour_force_participation |>
         select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-gender_diff_labour_force_participation |> count(REF_AREA)
 
 # River flooding, coastal flooding and wildfires
 floodings <- floodings |>
         select(REF_AREA, `Reference area`, Measure, `Return period`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
 river_flooding <- floodings |>
   filter(Measure == "Land exposure to river flooding")
-river_flooding |> count(REF_AREA)
 coastal_flooding <- floodings |>
   filter(Measure == "Land exposure to coastal flooding")
-coastal_flooding |> count(REF_AREA)
 
 # Wildfires
 wildfires <- wildfires |>
-        select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-wildfires |> count(REF_AREA)
+        select(REF_AREA, `Reference area`, Measure, `Return period`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
 
 # Hospital beds
 hospital_beds <- hospital_beds |>
         select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-hospital_beds |> count(REF_AREA)
 
 # Exposure to pollution
 pollution <- health_risks |>
-        select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country) |> filter(Measure == "Population exposure to PM2.5") 
-pollution |> count(REF_AREA)
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country) |> 
+  filter(Measure == "Population exposure to PM2.5") 
 
 # Patents
 patents <- patents |>
-  select(REF_AREA, `Reference area`, Measure, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
-patents |> count(REF_AREA)
+  select(REF_AREA, `Reference area`, Measure, `Reference date type`, `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+```
 
+Creating a dataframe storing metadata of all my variables:
+
+```{r}
+# List of all my datframes
+df_list <- list(
+  tot_population, pop_density, 
+  mortality_rates, infant_mortality, life_expectancy,
+  fertility_rate, old_dependency_ratio,
+  net_total_national_mobility, net_total_international_mobility,
+  vehicle_thefts, electric_cars, internet_access, 
+  gdp, income, labour_productivity, employment, unemployment, 
+  gender_diff_labour_force_participation, 
+  river_flooding, coastal_flooding, wildfires, 
+  hospital_beds, pollution, patents
+)
+
+# Function to extract constant columns as a single-row dataframe
+get_constant_values <- function(df) {
+  constant_cols <- df %>%
+    summarise(across(everything(), ~ length(unique(.)) == 1)) %>%
+    unlist()
+  
+  df |> 
+    summarise(across(names(df)[constant_cols], first))
+}
+
+# Apply the function to all my dataframes and store them in a list 
+constant_df <- map(df_list, get_constant_values)
+
+# Turn the list into a dataframe
+constant_df <- bind_rows(constant_df)
+print(constant_df, n=Inf)
+```
+
+Electric vehicles and net international migration need to scaled to the population of a region later on.
+
+Since I have stored all the metadata in a separate dataframe I now delete all the columns referring to metadata and then proceed to take the mean of each of my variables over all the available years: 
+
+```{r}
+cols_to_drop <- setdiff(colnames(constant_df), "Measure")
+
+cleaning_function <- function(df) {
+  
+  measure_name <- unique(df$Measure)
+  
+  df <- df |> 
+    select(-any_of(colnames(constant_df))) |> 
+    group_by(REF_AREA, `Reference area`, COUNTRY, Country) |> 
+    summarise(!!measure_name := mean(OBS_VALUE, na.rm = TRUE), .groups = "drop")  
+}
+
+tot_population <- cleaning_function(tot_population)
+pop_density <- cleaning_function(pop_density)
+mortality_rates <- cleaning_function(mortality_rates)
+infant_mortality <- cleaning_function(infant_mortality)
+life_expectancy <- cleaning_function(life_expectancy)
+fertility_rate <- cleaning_function(fertility_rate)
+old_dependency_ratio <- cleaning_function(old_dependency_ratio)
+net_total_national_mobility <- cleaning_function(net_total_national_mobility)
+net_total_international_mobility <- cleaning_function(net_total_international_mobility)
+vehicle_thefts <- cleaning_function(vehicle_thefts)
+electric_cars <- cleaning_function(electric_cars)
+internet_access <- cleaning_function(internet_access)
+gdp <- cleaning_function(gdp)
+income <- cleaning_function(income)
+labour_productivity <- cleaning_function(labour_productivity)
+employment <- cleaning_function(employment)
+unemployment <- cleaning_function(unemployment)
+gender_diff_labour_force_participation <- cleaning_function(gender_diff_labour_force_participation)
+river_flooding <- cleaning_function(river_flooding)
+coastal_flooding <- cleaning_function(coastal_flooding)
+wildfires <- cleaning_function(wildfires)
+hospital_beds <- cleaning_function(hospital_beds)
+pollution <- cleaning_function(pollution)
+patents <- cleaning_function(patents)
+```
+
+I now merge all datasets together:
+
+```{r}
+df_list <- list(
+  tot_population, pop_density, 
+  mortality_rates, infant_mortality, life_expectancy,
+  fertility_rate, old_dependency_ratio,
+  net_total_national_mobility, net_total_international_mobility,
+  vehicle_thefts, electric_cars, internet_access, 
+  gdp, income, labour_productivity, employment, unemployment, 
+  gender_diff_labour_force_participation, 
+  river_flooding, coastal_flooding, wildfires, 
+  hospital_beds, pollution, patents
+)
+# Merge datasets one by one using full_join
+final_data <- df_list[[1]]
+# Starting with total population which is the one with the most row allows me to retain all the data below
+
+# Loop through the remaining datasets and join them
+for(i in 2:length(df_list)) {
+  df_list[[i]] <- df_list[[i]] |> 
+    select(-c("Reference area", "COUNTRY", "Country"))
+  
+  final_data <- full_join(final_data, df_list[[i]], 
+                          by = c("REF_AREA"))
+}
+
+# View the resulting dataset
+str(final_data)
+```
+
+Now I have all the datasets together and I will select only EU27's regions
+
+```{r}
+# Population.x = tot_population
+# Population.y=  pop_density
+final_data <- final_data |> 
+  rename(tot_population = Population.x,
+         pop_density = Population.y,
+         region_code = REF_AREA,
+         region_name = "Reference area",
+         country_code = COUNTRY,
+         country_name = Country)
+
+# Deleting extra regions (region code ends with ZZZ)
+final_data <- final_data |> 
+  filter(!str_ends(region_code, "ZZ"))
+
+eu_codes <- countrycode::codelist |> 
+  filter(eu28 == "EU") |> 
+  select(iso3c) |> 
+  filter(iso3c != "GBR")
+
+eu_data <- final_data |> 
+  filter(country_code %in% eu_codes$iso3c)
+```
+
+I will now proceed with further cleaning
+
+```{r}
+eu_data <- eu_data |> 
+  janitor::clean_names() |> 
+  rename(
+    net_interregional_mobility = net_inter_regional_mobility_inflows_minus_outflows,
+    net_international_mobility = net_international_migration_inflows_minus_outflows,
+    electric_cars = vehicles_fleet_electric_power_engine,
+    share_households_internet = share_of_households_with_internet_broadband_access,
+    patents = patent_application_fractionnal_count
+  )
+
+eu_data <- eu_data |> 
+  mutate(electric_cars = electric_cars/tot_population,
+         net_international_mobility = net_international_mobility/tot_population)
+
+eu_data <- eu_data |> 
+  select(-tot_population)
+```
+
+Creating a factor variable which will be our target variable for the classification methods:
+
+```{r}
+eu_data <- eu_data |> 
+  mutate(region = as.factor(case_when(
+    country_code %in% c("AUT", "BEL", "DEU", "FRA", "LUX", "NLD") ~ "Western Europe",
+    country_code %in% c("GRC", "ESP", "ITA", "MLT", "PRT", "IRL") ~ "Southern Europe",
+    country_code %in% c("DNK", "EST", "FIN", "LTU", "LVA", "SWE") ~ "Northern Europe",
+    country_code %in% c("CZE", "HRV", "HUN", "POL", "ROU", "SVK", "SVN", "BGR") ~ "Eastern Europe")))
+```
+
+
+# Exploratory Data Analysis
+
+```{r}
+# No data on cyprus
+unique(eu_data$country_name)
+```
+
+
+
+```{r}
+explore_tbl(eu_data)
+plot_intro(eu_data)
+plot_missing(eu_data)
+```
+
+There are some variables which have worrying numbers of missing values.
+
+I am going to delete `net_international_mobility` because there is already a closely related (`net_interrregional_mobility`). I will also delete `primary_incomes_net` as that is likely to be related with GDP, and `share_households_internet` so as to retain only variables that have at least <50% of NAs
+
+```{r}
+eu_data <- eu_data |>
+  select(-c(net_international_mobility, primary_incomes_net, share_households_internet))
+```
+
+```{r}
+eu_data |> 
+  mutate(na = rowSums(is.na(eu_data))) |> 
+  group_by(country_code) |>  
+  summarize(mean_na = round(mean(na, na.rm = TRUE), 2)) |> 
+  print(n=Inf)
+```
+
+We can see that Eastern Europe's states and small states tend to have a higher number of missing values on average.
+
+```{r}
+summary(eu_data)
+```
+
+```{r, fig.height=21}
+explore_all(eu_data %>% select(where(is.numeric)))
+```
+
+Class distribution of the classification target variable:
+
+```{r}
+eu_data |>  count(region)
+```
+
+Conditional boxplots of my predictors based on the classification target variable
+
+```{r, warning=FALSE, fig.height=11}
+plot_boxplot(eu_data, by="region", ncol = 2, nrow = 5)
+```
+
+Correlation of numerical variables. By looking at the row of `gross_domestic_product`
+
+```{r, fig.height=8}
+plot_correlation(eu_data, type="continuous", cor_args=list("use" = "pairwise.complete.obs"))
+```
+
+
+# Imputation of missing values 
+
+```{r}
+
+```
+
+
+# 
+
+```{r}
 
 ```
 
