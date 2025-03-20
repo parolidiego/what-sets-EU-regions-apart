@@ -13,13 +13,21 @@ output:
 
 # Loading libraries
 
-```{r, message=FALSE}
+```{r, message=FALSE, warning=FALSE}
 rm(list = ls())
+library(MASS)
 library(tidyverse)
 library(httr2)
 library(DataExplorer)
 library(explore)
 library(mice)
+library(caret)
+library(nnet)
+library(pdp)
+library(rpart.plot)
+library(gbm)
+library(olsrr)
+library(fastDummies)
 ```
 
 # Loading data
@@ -377,11 +385,20 @@ Creating a factor variable which will be our target variable for the classificat
 
 ```{r}
 eu_data <- eu_data |> 
-  mutate(region = as.factor(case_when(
-    country_code %in% c("AUT", "BEL", "DEU", "FRA", "LUX", "NLD") ~ "Western Europe",
-    country_code %in% c("GRC", "ESP", "ITA", "MLT", "PRT", "IRL") ~ "Southern Europe",
-    country_code %in% c("DNK", "EST", "FIN", "LTU", "LVA", "SWE") ~ "Northern Europe",
-    country_code %in% c("CZE", "HRV", "HUN", "POL", "ROU", "SVK", "SVN", "BGR") ~ "Eastern Europe")))
+  mutate(continental_region = as.factor(case_when(
+    country_code %in% c("AUT", "BEL", "DEU", "FRA", "LUX", "NLD", "IRL") ~ "Western",
+    country_code %in% c("GRC", "ESP", "ITA", "MLT", "PRT") ~ "Southern",
+    country_code %in% c("DNK", "EST", "FIN", "LTU", "LVA", "SWE") ~ "Northern",
+    country_code %in% c("CZE", "HRV", "HUN", "POL", "ROU", "SVK", "SVN", "BGR") ~ "Eastern")))
+```
+
+I have NAs in some, but few observations for `gross_domestic_product`. We get rid of them because `gross_domestic_product` is the target variable for the regression models and imputing data for the target variable is not good practice
+
+```{r}
+sum(is.na(eu_data$gross_domestic_product))
+eu_data <- eu_data |> 
+  drop_na(gross_domestic_product)
+dim(eu_data)
 ```
 
 
@@ -430,32 +447,862 @@ explore_all(eu_data %>% select(where(is.numeric)))
 Class distribution of the classification target variable:
 
 ```{r}
-eu_data |>  count(region)
+eu_data |>  count(continental_region)
 ```
+
+The target variable for classification is not balanced, this can hinder the predictions, especially for the less represented levels.
 
 Conditional boxplots of my predictors based on the classification target variable
 
 ```{r, warning=FALSE, fig.height=11}
-plot_boxplot(eu_data, by="region", ncol = 2, nrow = 5)
+plot_boxplot(eu_data, by="continental_region", ncol = 2, nrow = 5)
 ```
 
-Correlation of numerical variables. By looking at the row of `gross_domestic_product`
+Correlation of numerical variables. Looking at `gross_domestic_product` I can also get an understanding of the most important predictors for what will be my target variable in the regression methods.
 
 ```{r, fig.height=8}
-plot_correlation(eu_data, type="continuous", cor_args=list("use" = "pairwise.complete.obs"))
+cor <- cor(eu_data |>  select(where(is.numeric)), use = "pairwise.complete.obs")
+corrplot::corrplot(cor, method = "color", type = "upper",
+                   tl.col = "black", 
+                   is.corr = TRUE)
 ```
 
 
 # Imputation of missing values 
 
-```{r}
+Since all of my data is numeric, I impute the rest of the missing data using `norm` method (i.e. bayesian linear regression). It would be better to impute several version of the dataset (`m>1`), run regression with all of them and the pool the results, but this is not the primary focus of the assignment so for simplicity and computational time reasons I impute the missing data just once.
 
+```{r, warning=FALSE}
+char_col <- eu_data |> 
+  select(c(region_code, region_name, country_code, country_name, continental_region))
+num_col <- eu_data |> 
+  select(-c(region_code, region_name, country_code, country_name, continental_region))
+imputed_df <- complete(mice(num_col, m=1, seed=123, printFlag=FALSE, method = "norm"))
+imputed_df <- cbind(imputed_df, char_col)
+```
+
+We now have a full dataset.
+
+```{r}
+describe_tbl(imputed_df)
 ```
 
 
-# 
+# Classification
+
+## Preparation
+
+First: dropping character variables
 
 ```{r}
+imputed_df <- imputed_df |> 
+  select(-c(region_code, region_name, country_code, country_name))
+```
 
+Second: data splitting
+
+70% of our observations will make up my training set, while the remaining 30% will be my testing set.
+
+```{r}
+set.seed(123)
+in_train <- createDataPartition(imputed_df$continental_region, p = 0.7, list = FALSE) 
+training <- imputed_df[ in_train,]
+testing <- imputed_df[-in_train,]
+```
+
+```{r}
+nrow(training)
+nrow(testing)
+```
+
+Third: set the reference class.
+
+```{r}
+# Set the reference class as the one with the most observation
+training$continental_region <- relevel(training$continental_region, ref = "Western")
+testing$continental_region <- relevel(testing$continental_region, ref = "Western")
+```
+
+
+## Setting the control function
+
+3 fold cross validation due to computational times
+
+```{r}
+ctrl <- trainControl(method = "cv", 
+                     number = 3,
+                     classProbs = T,
+                     summaryFunction = multiClassSummary,
+                     returnResamp = "final",
+                     savePredictions = "final",
+                     verboseIter = F)
+```
+
+## Benchmark
+
+```{r, message=FALSE}
+benchmark_classification <- multinom(continental_region ~ 1, 
+                                     data = training,
+                                     trace = FALSE)
+predictions_benchmark <- predict(benchmark_classification, 
+                                 newdata=testing, 
+                                 type="class")
+cm_benchmark_classification <- confusionMatrix(predictions_benchmark,
+                                                testing$continental_region)
+cm_benchmark_classification
+```
+
+As we can see we are assigning each observation to the most common class and we already get a 58% accuracy.
+
+## Multinomial logistic regression
+
+Simple multinomial logistic regression
+
+```{r, message=FALSE}
+training_scaled <- training |> 
+  mutate(across(where(is.numeric), scale))
+testing_scaled <- testing |> 
+  mutate(across(where(is.numeric), scale))
+multinomial_classification <- multinom(continental_region ~ ., 
+                                       data = training_scaled,
+                                       trace=FALSE)
+```
+
+Explain how the model works
+
+```{r, echo = FALSE}
+options(scipen = 999)
+```
+```{r}
+head(fitted(multinomial_classification))
+```
+```{r, echo=FALSE}
+options(scipen = 0)
+```
+
+Results...
+
+```{r}
+predictions_multinomial <- predict(multinomial_classification, 
+                                   newdata=testing_scaled, 
+                                   type="class")
+cm_multinomial_classification <- confusionMatrix(predictions_multinomial,
+                                                 testing_scaled$continental_region)
+cm_multinomial_classification
+multinomial_classification$AIC
+```
+
+Talk about accuracy etc.
+
+Which were the most important variables in the model? Explain what is being done below
+
+```{r, echo = FALSE}
+options(scipen = 999)
+```
+```{r}
+tidy(multinomial_classification) |> 
+  filter(p.value < 0.01) |> 
+  rename(coefficient = estimate) |> 
+  mutate(exp_coefficient = exp(coefficient), .before=std.error)  |> 
+  select(-c(statistic, std.error)) |> 
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+```
+```{r, echo=FALSE}
+options(scipen = 0)
+```
+
+Interpret results here 
+
+## LDA
+
+```{r}
+lda_classification <- lda(continental_region ~ ., data = training_scaled)
+predictions_lda <- predict(lda_classification, newdata=testing_scaled)$class
+cm_lda_classification <- confusionMatrix(predictions_lda, 
+                                         testing_scaled$continental_region)
+cm_lda_classification
+```
+
+Comments about results
+
+## K Nearest Neighbor
+
+We already have a really good model so accuracy seems like a good metric to maximize
+
+Computational times do not allow to put very large grids for machine learning methods, however small refinements of the grid have been carried out thorughout all the methods below. 
+
+```{r}
+param_grid = expand.grid(kmax = c(5, 10, 20), # Number of neighbors considered
+                         distance = c(0.5, 0.7, 0.9), # Parameter of Minkowski distance
+                         kernel = c("rectangular", "triangular")) # Kernel to use
+set.seed(123)
+knn_classification <- train(continental_region ~ .,
+                            data = training,
+                            method = "kknn",
+                            tuneGrid = param_grid,
+                            metric= "Accuracy",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+knn_classification$bestTune
+plot(knn_classification)
+```
+
+```{r}
+predictions_knn <- predict(knn_classification, 
+                           newdata=testing, 
+                           type="raw")
+cm_knn_classification <- confusionMatrix(predictions_knn, testing$continental_region)
+cm_knn_classification
+```
+
+Comments
+
+```{r}
+knn_imp <- varImp(knn_classification)
+plot(knn_imp, top=3)
+
+partial(knn_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Western",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(knn_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Eastern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(knn_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Northern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(knn_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Southern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+```
+
+## Decision trees
+
+```{r, warning=FALSE}
+param_grid = expand.grid(cp = seq(0.05, 0.25, 0.02)) # Complexity Parameter
+set.seed(123)
+dt_classification <- train(continental_region ~ .,
+                           data = training,
+                           method = "rpart",
+                           tuneGrid = param_grid,
+                           metric= "Accuracy",
+                           preProcess = c("scale", "center"),
+                           trControl = ctrl)
+```
+
+The best hyperparameter was always the smallest here as it allows for more complexity. 0.05 however allows for a nice visualization of a good number of nodes so I will stick to that
+
+```{r}
+dt_classification$bestTune
+rpart.plot(dt_classification$finalModel, digits=3)
+```
+
+Comment the tree here
+
+```{r}
+predictions_dt <- predict(dt_classification,
+                          newdata=testing, 
+                          type="raw")
+cm_dt_classification <- confusionMatrix(predictions_dt, testing$continental_region)
+cm_dt_classification
+```
+
+## Random Forest
+
+```{r}
+param_grid = expand.grid(predFixed = seq(5, 15, 5), # Number of Randomly Selected Predictors
+                         minNode = seq(1, 10, 3)) # Minimal Node Size
+set.seed(123)
+rf_classification <- train(continental_region ~ .,
+                           data = training,
+                           method = "Rborist",
+                           tuneGrid = param_grid,
+                           metric= "Accuracy",
+                           trControl = ctrl,
+                           preProcess = c("scale", "center"),
+                           verbose = FALSE)
+```
+
+```{r}
+rf_classification$bestTune
+plot(rf_classification)
+```
+
+```{r}
+predictions_rf <- predict(rf_classification,
+                          newdata=testing, 
+                          type="raw")
+cm_rf_classification <- confusionMatrix(predictions_rf, testing$continental_region)
+cm_rf_classification
+```
+
+Comments
+
+```{r}
+rf_imp <- varImp(rf_classification)
+plot(rf_imp, top = 5)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Western",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Eastern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Northern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Southern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+```
+
+Comments
+
+Two clear pattern for `employment_to_population` seems like for the initial range is flat then around 65% it either decreases sharply (for Eastern and Southern) or increases sharply (for Western and Northern). This indicates that Southern and Eastern Europe tend to have low `employment_to_population` (below 65%), while Western and Northern tend to have high `employment_to_population` (above 65%).
+
+## Gradient Boosting
+
+```{r, warning=FALSE}
+param_grid = expand.grid(n.trees = c(200, 500), # Number of Boosting Iterations
+                         interaction.depth = c(5, 10),  # Max Tree Depth
+                         shrinkage = c(0.01, 0.1, 0.3), #Shrinkage
+                         n.minobsinnode = c(10, 20, 30)) # Min. Terminal Node Size
+set.seed(123)
+gb_classification <- train(continental_region ~ .,
+                           data = training,
+                           method = "gbm",
+                           tuneGrid = param_grid,
+                           metric= "Accuracy",
+                           trControl = ctrl,
+                           preProcess = c("scale", "center"),
+                           verbose = FALSE)
+```
+
+```{r}
+gb_classification$bestTune
+plot(gb_classification)
+```
+
+```{r}
+predictions_gb <- predict(gb_classification,
+                          newdata=testing, 
+                          type="raw")
+cm_gb_classification <- confusionMatrix(predictions_gb, testing$continental_region)
+cm_gb_classification
+```
+
+Comments
+
+```{r}
+gb_imp <- varImp(gb_classification)
+plot(gb_imp, top = 5)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Western",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Eastern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Northern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Southern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+```
+
+Comments
+
+## Summary
+
+```{r}
+models_abbr <- c("benchmark", "multinomial", "lda", "knn", "dt", "rf", "gb")
+models_name <- c("Benchmark", "Multinomial", "LDA", "KNN", "Decision Tree", 
+                "Random Forest", "Gradient Boosting")
+
+# Create an empty tibble to store results
+performance_results <- tibble()
+
+# For loop to extract AIC, Accuracy, and Kappa for each model
+for (i in 1:length(models_abbr)) {
+  
+  # Get the current model and its name
+  model_abbr <- models_abbr[i]
+  model_name <- models_name[i]
+  
+  # Get the confusion matrix for the model
+  cm_name <- paste0("cm_", model_abbr, "_classification")
+  cm <- get(cm_name)  
+
+  # Extract Accuracy and Kappa
+  accuracy <- cm$overall["Accuracy"]
+  kappa <- cm$overall["Kappa"]
+  f1_scores <- cm$byClass[, 'F1']
+  
+  # Storing in a tibble all the F1 scores for all categories
+  f1_df <- as_tibble_row(f1_scores) %>%
+    rename_with(~ gsub("Class: ", "F1-", .))
+  
+  model_results <- tibble(Model = model_name, 
+                          Accuracy = accuracy,
+                          Kappa = kappa) %>% 
+                          bind_cols(f1_df)
+  
+  # Store the results in the tibble
+  performance_results <- bind_rows(performance_results,
+                                   model_results)
+}
+
+performance_results
+```
+
+# Regression
+
+No feature selecting for machine learning methods as it is not needed, they learn by themselves the p
+
+## Preparation
+
+I  need to split the data one more time. Again 70% of our observations will make up my training set, while the remaining 30% will be my testing set.
+
+```{r}
+set.seed(123)
+in_train <- createDataPartition(imputed_df$gross_domestic_product, p = 0.7, list = FALSE) 
+training <- imputed_df[ in_train,]
+testing <- imputed_df[-in_train,]
+```
+
+```{r}
+nrow(training)
+nrow(testing)
+```
+
+## Setting the control function
+
+3 fold cross validation due to computational times
+
+```{r}
+ctrl <- trainControl(method = "cv", 
+                     number = 3,
+                     summaryFunction = defaultSummary,
+                     returnResamp = "final",
+                     savePredictions = "final",
+                     verboseIter = F)
+```
+
+## Benchmark
+
+```{r}
+benchmark_regression <- lm(gross_domestic_product ~ 1, data=training)
+summary(benchmark_regression)
+predictions_benchmark <- predict(benchmark_regression,
+                                 newdata=testing)
+round(postResample(pred = predictions_benchmark,  obs = testing$gross_domestic_product),3)
+```
+
+
+## Linear regression
+
+```{r}
+training_scaled <- training |> 
+  mutate(across(where(is.numeric), scale))
+testing_scaled <- testing |> 
+  mutate(across(where(is.numeric), scale))
+linear_regression <- lm(gross_domestic_product ~ ., data=training_scaled)
+```
+
+```{r}
+tidy(linear_regression) |> 
+  select(-c(statistic, std.error)) |> 
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+```
+
+Most of the variables are significant
+
+```{r}
+AIC(linear_regression)
+predictions_linear <- predict(linear_regression,
+                              newdata=testing_scaled)
+round(postResample(pred = predictions_linear,  obs = testing_scaled$gross_domestic_product),3)
+```
+
+## Stepwise feature selection
+
+Stepwise based on AIC
+
+```{r, warning=FALSE}
+stepwise_regression <- ols_step_both_aic(linear_regression)
+stepwise_regression
+```
+
+Able to reduce AIC and adj R squared. Comment on variable chosen
+
+Do it with caret now but maximizing RMSE
+
+```{r}
+# Dummifying continental_region
+training_dummies <- dummy_cols(training, select_columns = "continental_region",
+                               remove_selected_columns = TRUE)
+# Remove one of the dummy columns
+training_dummies <- training_dummies[, !colnames(training_dummies) %in%
+                                       c("continental_region_Western")]
+# Same for testing
+testing_dummies <- dummy_cols(testing, select_columns = "continental_region",
+                              remove_selected_columns = TRUE)
+testing_dummies <- testing_dummies[, !colnames(training_dummies) %in%
+                                       c("continental_region_Western")]
+param_grid = expand.grid(nvmax = seq(1, 20, 1)) # Maximum Number of Predictors
+set.seed(123)
+caret_sw_regression <- train(gross_domestic_product ~ .,
+                            data = training_dummies,
+                            method = "leapSeq",
+                            tuneGrid = param_grid,
+                            metric= "RMSE",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+caret_sw_regression$bestTune
+plot(caret_sw_regression)
+```
+
+```{r}
+best_model_size <- caret_sw_regression$bestTune$nvmax
+coef(caret_sw_regression$finalModel, id = best_model_size)
+```
+
+
+```{r}
+predictions_caret_sw <- predict(caret_sw_regression,
+                                newdata=testing_dummies)
+round(postResample(pred = predictions_caret_sw,  
+                   obs = testing_dummies$gross_domestic_product),3)
+```
+
+## Elastic-Net
+
+```{r}
+param_grid = expand.grid(alpha = seq(0, 1, 0.1), # Mixing Percentage
+                         lambda = seq(1, 100, 1)) # Regularization Parameter
+set.seed(123)
+elnet_regression <- train(gross_domestic_product ~ .,
+                            data = training_dummies,
+                            method = "glmnet",
+                            tuneGrid = param_grid,
+                            metric= "RMSE",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+elnet_regression$bestTune
+plot(elnet_regression)
+```
+
+`alpha = 1` indicates Lasso regression
+
+```{r}
+coef(elnet_regression$finalModel, s=elnet_regression$bestTune$lambda)
+```
+
+It seems like the model is actually not performing any kind of feature selection. It is keeping all the variables.
+
+```{r}
+predictions_elnet <- predict(elnet_regression,
+                             newdata=testing_dummies)
+round(postResample(pred = predictions_elnet,  
+                   obs = testing_dummies$gross_domestic_product),3)
+```
+
+## K Nearest Neighbor
+
+Computational times do not allow to put very large grids for machine learning methods, however small refinements of the grid have been carried out throughout all the methods below. 
+
+```{r}
+param_grid = expand.grid(kmax = c(3, 5, 7, 9), # Number of neighbors considered
+                         distance = c(0.7, 0.9), # Parameter of Minkowski distance
+                         kernel = c("rectangular", "triangular", "optimal")) # Kernel to use
+set.seed(123)
+knn_regression <- train(gross_domestic_product ~ .,
+                            data = training,
+                            method = "kknn",
+                            tuneGrid = param_grid,
+                            metric= "RMSE",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+knn_regression$bestTune
+plot(knn_regression)
+```
+
+```{r}
+predictions_knn <- predict(knn_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_knn,  obs = testing$gross_domestic_product),3)
+```
+
+Comments
+
+```{r}
+knn_imp <- varImp(knn_regression)
+plot(knn_imp, top=10)
+
+partial(knn_regression, pred.var = "labour_productivity", 
+        plot = TRUE, rug = TRUE)
+```
+
+Seems to have a quasi linear relationship and then it platous a bit 
+
+## Decision trees
+
+```{r, warning=FALSE}
+param_grid = expand.grid(cp = seq(0.05, 0.25, 0.02)) # Complexity Parameter
+set.seed(123)
+dt_regression <- train(gross_domestic_product ~ .,
+                           data = training,
+                           method = "rpart",
+                           tuneGrid = param_grid,
+                           metric= "RMSE",
+                           preProcess = c("scale", "center"),
+                           trControl = ctrl)
+```
+
+The best hyperparameter was always the smallest here as it allows for more complexity. 0.05 however allows for a nice visualization of a good number of nodes so I will stick to that
+
+```{r}
+dt_regression$bestTune
+rpart.plot(dt_regression$finalModel, digits=3)
+```
+
+Again confirms labour prodctivity as a very important variable
+
+```{r}
+predictions_dt <- predict(dt_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_dt,  obs = testing$gross_domestic_product),3)
+```
+
+## Random Forest
+
+```{r}
+param_grid = expand.grid(predFixed = seq(10, 20, 5), # Number of Randomly Selected Predictors
+                         minNode = seq(3, 7, 1)) # Minimal Node Size
+set.seed(123)
+rf_regression <- train(gross_domestic_product ~ .,
+                       data = training,
+                       method = "Rborist",
+                       tuneGrid = param_grid,
+                       metric= "RMSE",
+                       preProcess = c("scale", "center"),
+                       trControl = ctrl,
+                       verbose = FALSE)
+```
+
+```{r}
+rf_regression$bestTune
+plot(rf_regression)
+```
+
+```{r}
+predictions_rf <- predict(rf_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_rf,  obs = testing$gross_domestic_product),3)
+```
+
+```{r}
+rf_imp <- varImp(rf_regression)
+plot(rf_imp, top=10)
+
+partial(rf_regression, pred.var = "labour_productivity", 
+        plot = TRUE, rug = TRUE)
+partial(rf_regression, pred.var = "patents", 
+        plot = TRUE, rug = TRUE)
+```
+
+`labour_productivity` has a very similar pattern as the one that was found for KNN.
+
+## Gradient Boosting
+
+```{r, warning=FALSE}
+param_grid = expand.grid(n.trees = c(300, 500, 700), # Number of Boosting Iterations
+                         interaction.depth = c(10, 20, 30),  # Max Tree Depth
+                         shrinkage = c(0.001, 0.01, 0.1), # Shrinkage
+                         n.minobsinnode = c(2, 5, 10)) # Min. Terminal Node Size
+set.seed(123)
+gb_regression <- train(gross_domestic_product ~ .,
+                       data = training,
+                       method = "gbm",
+                       tuneGrid = param_grid,
+                       metric= "RMSE",
+                       trControl = ctrl,
+                       preProcess = c("scale", "center"),
+                       verbose = FALSE)
+```
+
+```{r}
+gb_regression$bestTune
+plot(gb_regression)
+```
+
+```{r}
+predictions_gb <- predict(gb_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_gb,  obs = testing$gross_domestic_product),3)
+```
+
+```{r}
+gb_imp <- varImp(gb_regression)
+plot(gb_imp, top=10)
+
+partial(gb_regression, pred.var = "labour_productivity", 
+        plot = TRUE, rug = TRUE)
+partial(gb_regression, pred.var = "patents", 
+        plot = TRUE, rug = TRUE)
+partial(gb_regression, pred.var = "hospital_beds", 
+        plot = TRUE, rug = TRUE)
+```
+
+## Neural Network
+
+```{r, warning=FALSE}
+param_grid = expand.grid(layer1 = c(4, 2),
+                         layer2 = c(2, 1, 0),
+                         layer3 = c(0)) # Layers neural network
+set.seed(123)
+nn_regression <- train(gross_domestic_product ~ .,
+                       data = training,
+                       method = "neuralnet",
+                       tuneGrid = param_grid,
+                       metric= "RMSE",
+                       trControl = ctrl,
+                       preProcess = c("scale", "center"))
+```
+
+```{r}
+nn_regression$bestTune
+```
+
+```{r}
+predictions_nn <- predict(nn_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_nn,  obs = testing$gross_domestic_product),3)
+```
+
+```{r}
+nn_imp <- varImp(nn_regression)
+plot(nn_imp, top=10)
+
+partial(nn_regression, pred.var = "labour_productivity", 
+        plot = TRUE, rug = TRUE)
+```
+
+## Summary
+
+```{r}
+summary <- bind_rows(round(postResample(pred = predictions_benchmark,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_linear,  
+                             obs = testing_scaled$gross_domestic_product),3),
+          round(postResample(pred = predictions_caret_sw,  
+                             obs = testing_dummies$gross_domestic_product),3),
+          round(postResample(pred = predictions_elnet,    
+                             obs = testing_dummies$gross_domestic_product),3),
+          round(postResample(pred = predictions_knn,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_dt,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_rf,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_gb, 
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_nn,  
+                             obs = testing$gross_domestic_product),3))
+
+sigma_gdp <- sd(training$gross_domestic_product)
+
+summary <- summary |> 
+  mutate(
+    # Unscale RMSE only for the second row
+    RMSE = ifelse(row_number() == 2, RMSE * sigma_gdp, RMSE),
+    # Unscale MAE only for the second row
+    MAE = ifelse(row_number() == 2, MAE * sigma_gdp, MAE))
+
+Model <- c("Benchmark", "Linear Regression", "Stepwise", 
+           "Elastic Net", "KNN", "Decision Tree", 
+           "Random Forest", "Gradient Boosting", "Neural Network")
+
+summary <- cbind(Model, summary)
+summary
+```
+
+## Ensemble
+
+```{r}
+ensemble_pred <- (predictions_elnet + predictions_gb + predictions_rf)/3
+
+round(postResample(pred = ensemble_pred, 
+                   obs = testing$gross_domestic_product),3)
+```
+
+### Predictions vs actual
+
+```{r}
+testing_regions <- char_col[-in_train,]
+final_table <- tibble(
+  region = testing_regions$region_name,
+  country = testing_regions$country_name,
+  continental_region = testing_regions$continental_region,
+  predictions = ensemble_pred,
+  actual = testing$gross_domestic_product,
+  error = predictions - actual
+)
+
+head(final_table |> arrange(abs(error)))
+tail(final_table |> arrange(abs(error)))
+
+options(scipen = 999)
+ggplot(final_table, aes(x = actual, y = predictions, color = continental_region)) +
+  geom_point(alpha = 0.7, size = 3) + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") + 
+  labs(
+    title = "Actual vs. Predicted GDP",
+    x = "Actual GDP",
+    y = "Predicted GDP",
+    color = "Continental Region"
+  ) +
+  theme_minimal()
+```
+
+## Prediction interval
+
+```{r}
+error <- testing$gross_domestic_product - ensemble_pred
+noise <- error[1:100]
+lwr <- ensemble_pred[101:length(ensemble_pred)] + quantile(noise,0.05, na.rm=T)
+upr <- ensemble_pred[101:length(ensemble_pred)] + quantile(noise,0.95, na.rm=T)
+predictions <- tibble(actual = testing$gross_domestic_product[101:length(testing$gross_domestic_product)],
+                      fit = ensemble_pred[101:length(ensemble_pred)], 
+                      lwr = lwr, 
+                      upr = upr,
+                      continental_region = testing_regions$continental_region[101:length(testing_regions$continental_region)])
+predictions <- predictions |> mutate(out = factor(if_else(actual<lwr | actual>upr,1,0)))
+
+mean(predictions$out==1)
+ggplot(predictions, aes(x = fit, y = actual))+
+  geom_point(aes(color = continental_region)) + 
+  theme_minimal() +
+  geom_ribbon(data = predictions, aes(ymin = lwr, ymax = upr), alpha=0.3) +
+  labs(title = "Prediction intervals", x = "Predicted GDP",y = "Actual GDP")
 ```
 
