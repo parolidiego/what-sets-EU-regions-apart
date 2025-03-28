@@ -1,0 +1,1414 @@
+---
+title: "What sets European regions apart?"
+author: "Diego Paroli"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::robobook
+---
+
+# Project
+
+```{r, echo=FALSE, fig.height=4}
+knitr::include_graphics("img/Flag_of_Europe.png")
+```
+
+The project tries to understand what are the main differences across European Union's NUTS-3 level regions applying statistical and machine learning techniques to socio-economic and environmental data in order to:
+
+1.  Classify each NUTS-3 region into its continental subregion (Eastern, Western, Northern or Southern Europe)
+
+2.  Predict NUTS-3 regions' GDP
+
+# Loading libraries
+
+```{r, message=FALSE, warning=FALSE}
+rm(list = ls())
+library(MASS)
+library(tidyverse)
+library(httr2)
+library(DataExplorer)
+library(explore)
+library(mice)
+library(caret)
+library(nnet)
+library(pdp)
+library(rpart.plot)
+library(gbm)
+library(olsrr)
+library(fastDummies)
+```
+
+# Loading data
+
+All the data used is at the third regional level (corresponding to the EU's NUTS-3 level), and it is obtained from [OECD](https://data-explorer.oecd.org/) databases which seemed the source with the most data available for level-3 regions.
+
+```{r}
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...LAND_AREA+POP...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/population.csv")
+population <- read_csv("data/population.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...DEPEND_RATIO+FERT_RATIO...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/demographic.csv")
+demographic <- read_csv("data/demographic.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...NETMIG+OUTMIG+INMIG+NETMOB+OUTMOB+INMOB...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/migration.csv")
+migration <- read_csv("data/migration.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...MORT_ICDV_CRUDE_RATIO+MORT_ICDI_CRUDE_RATIO+MORT_ICDJ_CRUDE_RATIO+MORT_INFANT+MORT_STANDARD_RATIO+LFEXP...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/mortality.csv")
+mortality <- read_csv("data/mortality.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...MORT_ICDV_CRUDE_RATIO+VEH_THEFT...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/safety.csv")
+safety <- read_csv("data/safety.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...VEH_STOCK_ELECTRIC...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/electric_cars.csv")
+electric_cars <- read_csv("data/electric_cars.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_SOC@DF_SOC,2.2/A.TL3...BB_ACC...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/internet_access.csv")
+internet_access <- read_csv("data/internet_access.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...GDP..Q.USD_PPP_PS?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/gdp.csv")
+gdp <- read_csv("data/gdp.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...B5N..Q.USD_PPP_PS?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/income.csv")
+income <- read_csv("data/income.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_ECO@DF_ECO,2.0/A.TL3...LAB_PROD._T.Q.USD_PPP_WR?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/labour_productivity.csv")
+labour_productivity <- read_csv("data/labour_productivity.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...EMP_RATIO.Y15T64._T.PT_POP_SUB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/employment.csv")
+employment <- read_csv("data/employment.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...UNE_RATE.Y15T64._T.PT_LF_SUB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/unemployment.csv")
+unemployment <- read_csv("data/unemployment.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_LABOUR@DF_LAB,2.0/A.TL3...LF_RATE_SEXDIF.Y15T64._T.PD?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/gender_diff_labour_force_participation.csv")
+gender_diff_labour_force_participation <- read_csv("data/gender_diff_labour_force_participation.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...RF_LAND_EXP+CF_LAND_EXP.Y_20...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/floodings.csv")
+floodings <- read_csv("data/floodings.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_CLIM@DF_CLIM,1.0/A.TL3...FIRE_LAND_EXP....PT_LAR?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/wildfires.csv")
+wildfires <- read_csv("data/wildfires.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_CARE,2.0/A.TL3...HB...10P3HB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/hospital_beds.csv")
+hospital_beds <- read_csv("data/hospital_beds.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_HEALTH@DF_RISK,2.0/A.TL3...PM25_POP_EXP+OBESITY...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/health_risks.csv")
+health_risks <- read_csv("data/health_risks.csv", show_col_types = FALSE)
+
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_PAT@DF_PAT,1.0/A.TL3....APPLICATION.PAT.._T.10P6HB?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/patents.csv")
+patents <- read_csv("data/patents.csv", show_col_types = FALSE)
+```
+
+The data has been obtained through talking directly to the OECD API and the written over .csv files to avoid having to recall the API each time. The code with the queries to the API and the writing of the .csv files have been commented, but they remain available for any future update or for reproducibility.
+
+# Data cleaning
+
+First cleaning of the variables (selecting the relevant age, sex groups and/or relevant units of measure):
+
+```{r}
+# Population and population density
+population <- population |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+         TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+tot_population <- population |> 
+  filter(Measure=="Population") |> 
+  filter(Age=="Total") |> 
+  filter(Sex=="Total") |> 
+  filter(`Unit of measure`=="Persons")
+pop_density <- population |> 
+  filter(Measure=="Population") |> 
+  filter(Age=="Total") |> 
+  filter(Sex=="Total") |> 
+  filter(`Unit of measure`=="Persons per square kilometer")
+
+# Fertility rate and age dependency
+demographic <- demographic |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+         TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+fertility_rate <- demographic |>
+  filter(Measure=="Fertility rate") |>
+  filter(Age == "Total") 
+old_dependency_ratio <- demographic |> 
+  filter(Measure=="Dependency ratio") |> 
+  filter(Age == "65 years or over") |> 
+  filter(`Unit of measure` == "Percentage of population aged 15-64 years")
+
+# Net national and international migration
+migration <- migration |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+         TIME_PERIOD, OBS_VALUE, COUNTRY, Country) |> 
+  filter(Sex == "Total") |> 
+  filter(Measure %in% c("Net inter-regional mobility (inflows minus outflows)", "Net international migration (inflows minus outflows)"))
+net_total_national_mobility <- migration |> 
+  filter(Measure == "Net inter-regional mobility (inflows minus outflows)") |>
+  filter(Age == "Total") |> 
+  filter(`Unit of measure` == "Percentage of population")
+net_total_international_mobility <- migration |> 
+  filter(Measure == "Net international migration (inflows minus outflows)")
+
+# Several measure related with mortality
+mortality <- mortality |> 
+  select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+         TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+mortality_rates <- mortality |> 
+  filter(Measure == "Age-adjusted mortality rate") |> 
+  filter(Sex == "Total")
+infant_mortality <- mortality |> 
+  filter(Measure == "Infant mortality rate") |> 
+  filter(Sex == "Total") 
+life_expectancy <- mortality |> 
+  filter(Measure == "Life expectancy") |> 
+  filter(Sex == "Total") 
+
+# Vehicles thefts
+safety <- safety |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+           TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+vehicle_thefts <- safety |> 
+  filter(Measure == "Motor vehicle theft") |> 
+  filter(`Unit of measure`=="Cases per 100 000 persons") 
+
+# Electric cars
+electric_cars <- electric_cars |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+           TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Internet access
+internet_access <- internet_access |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+           TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# GDP
+gdp <- gdp |>
+    select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, 
+           TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Primary income
+income <- income |>
+    select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, 
+           TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Labour productivity
+labour_productivity <- labour_productivity |>
+    select(REF_AREA, `Reference area`, Measure, `Price base`, `Unit of measure`, 
+           TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Employment
+employment <- employment |>
+    select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`,
+           TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Unemployment
+unemployment <- unemployment |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, `Unit of measure`, 
+               TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Labour force participation rate, gender difference
+gender_diff_labour_force_participation <- gender_diff_labour_force_participation |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, 
+               `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# River flooding, coastal flooding and wildfires
+floodings <- floodings |>
+        select(REF_AREA, `Reference area`, Measure, `Return period`, 
+               `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+river_flooding <- floodings |>
+  filter(Measure == "Land exposure to river flooding")
+coastal_flooding <- floodings |>
+  filter(Measure == "Land exposure to coastal flooding")
+
+# Wildfires
+wildfires <- wildfires |>
+        select(REF_AREA, `Reference area`, Measure, `Return period`, 
+               `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Hospital beds
+hospital_beds <- hospital_beds |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, 
+               `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+
+# Exposure to pollution
+pollution <- health_risks |>
+        select(REF_AREA, `Reference area`, Measure, Age, Sex, 
+               `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country) |> 
+  filter(Measure == "Population exposure to PM2.5") 
+
+# Patents
+patents <- patents |>
+  select(REF_AREA, `Reference area`, Measure, `Reference date type`, 
+         `Unit of measure`, TIME_PERIOD, OBS_VALUE, COUNTRY, Country)
+```
+
+Creating a dataframe storing metadata of all my variables:
+
+```{r}
+# List of all my datframes
+df_list <- list(
+  tot_population, pop_density, 
+  mortality_rates, infant_mortality, life_expectancy,
+  fertility_rate, old_dependency_ratio,
+  net_total_national_mobility, net_total_international_mobility,
+  vehicle_thefts, electric_cars, internet_access, 
+  gdp, income, labour_productivity, employment, unemployment, 
+  gender_diff_labour_force_participation, 
+  river_flooding, coastal_flooding, wildfires, 
+  hospital_beds, pollution, patents
+)
+
+# Function to extract constant columns as a single-row dataframe
+get_constant_values <- function(df) {
+  constant_cols <- df %>%
+    summarise(across(everything(), ~ length(unique(.)) == 1)) %>%
+    unlist()
+  
+  df |> 
+    summarise(across(names(df)[constant_cols], first))
+}
+
+# Apply the function to all my dataframes and store them in a list 
+constant_df <- map(df_list, get_constant_values)
+
+# Turn the list into a dataframe
+constant_df <- bind_rows(constant_df)
+print(constant_df, n=Inf)
+```
+
+From the metadata we can see that electric vehicles and net international migration need to scaled to the population level of a regions. All the other variables already have some sort of scale which allows me to compare them across regions.
+
+Since I have stored all the metadata in a separate dataframe I now delete all the columns referring to metadata and then proceed to take the mean of each of my variables over all the available years:
+
+```{r}
+cols_to_drop <- setdiff(colnames(constant_df), "Measure")
+
+cleaning_function <- function(df) {
+  
+  measure_name <- unique(df$Measure)
+  
+  df <- df |> 
+    select(-any_of(colnames(constant_df))) |> 
+    group_by(REF_AREA, `Reference area`, COUNTRY, Country) |> 
+    summarise(!!measure_name := mean(OBS_VALUE, na.rm = TRUE), 
+              .groups = "drop")  
+}
+
+tot_population <- cleaning_function(tot_population)
+pop_density <- cleaning_function(pop_density)
+mortality_rates <- cleaning_function(mortality_rates)
+infant_mortality <- cleaning_function(infant_mortality)
+life_expectancy <- cleaning_function(life_expectancy)
+fertility_rate <- cleaning_function(fertility_rate)
+old_dependency_ratio <- cleaning_function(old_dependency_ratio)
+net_total_national_mobility <- cleaning_function(net_total_national_mobility)
+net_total_international_mobility <- cleaning_function(net_total_international_mobility)
+vehicle_thefts <- cleaning_function(vehicle_thefts)
+electric_cars <- cleaning_function(electric_cars)
+internet_access <- cleaning_function(internet_access)
+gdp <- cleaning_function(gdp)
+income <- cleaning_function(income)
+labour_productivity <- cleaning_function(labour_productivity)
+employment <- cleaning_function(employment)
+unemployment <- cleaning_function(unemployment)
+gender_diff_labour_force_participation <- cleaning_function(gender_diff_labour_force_participation)
+river_flooding <- cleaning_function(river_flooding)
+coastal_flooding <- cleaning_function(coastal_flooding)
+wildfires <- cleaning_function(wildfires)
+hospital_beds <- cleaning_function(hospital_beds)
+pollution <- cleaning_function(pollution)
+patents <- cleaning_function(patents)
+```
+
+I now merge all datasets together:
+
+```{r}
+df_list <- list(
+  tot_population, pop_density, 
+  mortality_rates, infant_mortality, life_expectancy,
+  fertility_rate, old_dependency_ratio,
+  net_total_national_mobility, net_total_international_mobility,
+  vehicle_thefts, electric_cars, internet_access, 
+  gdp, income, labour_productivity, employment, unemployment, 
+  gender_diff_labour_force_participation, 
+  river_flooding, coastal_flooding, wildfires, 
+  hospital_beds, pollution, patents
+)
+# Merge datasets one by one using full_join
+final_data <- df_list[[1]]
+# Starting with total population which is the one with the most row allows me to retain all the data below
+
+# Loop through the remaining datasets and join them
+for(i in 2:length(df_list)) {
+  df_list[[i]] <- df_list[[i]] |> 
+    select(-c("Reference area", "COUNTRY", "Country"))
+  
+  final_data <- full_join(final_data, df_list[[i]], 
+                          by = c("REF_AREA"))
+}
+
+# View the resulting dataset
+str(final_data)
+```
+
+Now I have all the datasets together and I will select only EU27's regions as for there was data for all OECD countries.
+
+```{r}
+# Population.x = tot_population
+# Population.y=  pop_density
+final_data <- final_data |> 
+  rename(tot_population = Population.x,
+         pop_density = Population.y,
+         region_code = REF_AREA,
+         region_name = "Reference area",
+         country_code = COUNTRY,
+         country_name = Country)
+
+# Deleting extra regions (region code ends with ZZZ)
+final_data <- final_data |> 
+  filter(!str_ends(region_code, "ZZ"))
+
+eu_codes <- countrycode::codelist |> 
+  filter(eu28 == "EU") |> 
+  select(iso3c) |> 
+  filter(iso3c != "GBR")
+
+eu_data <- final_data |> 
+  filter(country_code %in% eu_codes$iso3c)
+```
+
+I will now proceed with further cleaning.
+
+```{r}
+eu_data <- eu_data |> 
+  janitor::clean_names() |> 
+  rename(
+    net_interregional_mobility = net_inter_regional_mobility_inflows_minus_outflows,
+    net_international_mobility = net_international_migration_inflows_minus_outflows,
+    electric_cars = vehicles_fleet_electric_power_engine,
+    share_households_internet = share_of_households_with_internet_broadband_access,
+    patents = patent_application_fractionnal_count
+  )
+
+eu_data <- eu_data |> 
+  mutate(electric_cars = electric_cars/tot_population,
+         net_international_mobility = net_international_mobility/tot_population)
+
+eu_data <- eu_data |> 
+  select(-tot_population)
+```
+
+Creating a factor variable which will be our target variable for the classification methods (based on the United Nations' geoscheme):
+
+```{r}
+eu_data <- eu_data |> 
+  mutate(continental_region = as.factor(case_when(
+    country_code %in% c("AUT", "BEL", "DEU", "FRA", "LUX", "NLD") ~ "Western",
+    country_code %in% c("GRC", "ESP", "ITA", "MLT", "PRT") ~ "Southern",
+    country_code %in% c("DNK", "EST", "FIN", "LTU", "LVA", "SWE", "IRL") ~ "Northern",
+    country_code %in% c("CZE", "HRV", "HUN", "POL", "ROU", "SVK", "SVN", "BGR") ~ "Eastern")))
+```
+
+I have NAs in some, but few observations for `gross_domestic_product`. We get rid of them because `gross_domestic_product` is the target variable for the regression models and imputing data for the target variable is not good practice.
+
+```{r}
+sum(is.na(eu_data$gross_domestic_product))
+eu_data <- eu_data |> 
+  drop_na(gross_domestic_product)
+dim(eu_data)
+```
+
+This is my final data set.
+
+# Exploratory Data Analysis
+
+There is no data on Bulgaria, Croatia, Cyprus, Malta and Romania. Some are not part of the OECD, for some other instead the data might have not been available or they were part of those 93 observations that were deleted before because GDP was missing.
+
+```{r}
+unique(eu_data$country_name)
+```
+
+```{r}
+explore_tbl(eu_data)
+plot_intro(eu_data)
+plot_missing(eu_data)
+```
+
+There are some variables which have worrying numbers of missing values.
+
+I am going to delete `net_international_mobility` because there is already a closely related (`net_interrregional_mobility`) with way less missing observations. I will also delete `primary_incomes_net` as that is likely to be related with GDP and `share_households_internet`. The rest of the missing values will be imputed.
+
+```{r}
+eu_data <- eu_data |>
+  select(-c(net_international_mobility, primary_incomes_net, share_households_internet))
+```
+
+Checking if some countries have poor data quality by looking at the average number of NAs per observation in countries:
+
+```{r}
+eu_data |> 
+  mutate(na = rowSums(is.na(eu_data))) |> 
+  group_by(country_code) |>  
+  summarize(mean_na = round(mean(na, na.rm = TRUE), 2)) |> 
+  print(n=Inf)
+```
+
+We can see that small states tend to have a higher number of missing values on average.
+
+```{r}
+summary(eu_data)
+```
+
+Distribution of numeric variables:
+
+```{r, fig.height=21}
+explore_all(eu_data %>% select(where(is.numeric)))
+```
+
+Class distribution of the classification target variable:
+
+```{r}
+eu_data |>  count(continental_region)
+```
+
+The target variable for classification is not balanced, this can hinder the predictions, especially for the less represented levels.
+
+Conditional boxplots of my predictors based on the classification target variable
+
+```{r, warning=FALSE, fig.height=14}
+plot_boxplot(eu_data, by="continental_region", ncol = 3, nrow = 7)
+```
+
+Correlation of numerical variables. Looking at `gross_domestic_product` I can also get an understanding of the most important predictors for what will be my target variable in the regression methods.
+
+```{r, fig.height=8}
+cor <- cor(eu_data |>  select(where(is.numeric)), use = "pairwise.complete.obs")
+corrplot::corrplot(cor, method = "color", type = "upper",
+                   tl.col = "black", 
+                   is.corr = TRUE)
+```
+
+# Imputation of missing values
+
+Since all of my data is numeric, I impute the rest of the missing data using `norm` method (i.e. bayesian linear regression). It would be better to impute several version of the dataset (`m>1`), run regression with all of them and the pool the results, but this is not the primary focus of the assignment so for simplicity and computational time reasons I impute the missing data just once.
+
+```{r, warning=FALSE}
+char_col <- eu_data |> 
+  select(c(region_code, region_name, country_code, country_name, continental_region))
+num_col <- eu_data |> 
+  select(-c(region_code, region_name, country_code, country_name, continental_region))
+imputed_df <- complete(mice(num_col, m=1, seed=123, printFlag=FALSE, method = "norm"))
+imputed_df <- cbind(imputed_df, char_col)
+```
+
+We now have a complete dataset.
+
+```{r}
+describe_tbl(imputed_df)
+```
+
+# Classification
+
+I try below several models. The sections will be usually structured like this:
+
+1.   First I train the models (using cross validation for hyperparameter tuning when the model has hyperparameters)
+
+2.  Then I use the models to predict the observations of the testing set and comment on the performance of the model
+
+3.  Finally I look at which variables are most important for each model, interpreting the results
+
+## Preparation
+
+First: dropping character variables
+
+```{r}
+imputed_df <- imputed_df |> 
+  select(-c(region_code, region_name, country_code, country_name))
+```
+
+Second: data splitting
+
+70% of our observations will make up my training set, while the remaining 30% will be my testing set.
+
+```{r}
+set.seed(123)
+in_train <- createDataPartition(imputed_df$continental_region, p = 0.7, list = FALSE) 
+training <- imputed_df[ in_train,]
+testing <- imputed_df[-in_train,]
+```
+
+```{r}
+nrow(training)
+nrow(testing)
+```
+
+Third: set the reference class as the one with most observations (Western Europe).
+
+```{r}
+training$continental_region <- relevel(training$continental_region, ref = "Western")
+testing$continental_region <- relevel(testing$continental_region, ref = "Western")
+```
+
+## Setting the control function
+
+3 fold cross validation is not ideal, but I need to set it this way due to computational times.
+
+```{r}
+ctrl <- trainControl(method = "cv", 
+                     number = 3,
+                     classProbs = T,
+                     summaryFunction = multiClassSummary,
+                     returnResamp = "final",
+                     savePredictions = "final",
+                     verboseIter = F)
+```
+
+## Benchmark
+
+First I run a benchmark model which predicts every observation the same (with the most common level for `continental_region`).
+
+```{r, message=FALSE}
+benchmark_classification <- multinom(continental_region ~ 1, 
+                                     data = training,
+                                     trace = FALSE)
+predictions_benchmark <- predict(benchmark_classification, 
+                                 newdata=testing, 
+                                 type="class")
+cm_benchmark_classification <- confusionMatrix(predictions_benchmark,
+                                                testing$continental_region)
+cm_benchmark_classification
+```
+
+As can be seen, even though all observations are assigned to the most common class this already yields a 58% accuracy. This is a remainder to always treat accuracy carefully.
+
+## Multinomial logistic regression
+
+I now run a simple multinomial logistic regression.
+
+```{r, message=FALSE}
+training_scaled <- training |> 
+  mutate(across(where(is.numeric), scale))
+testing_scaled <- testing |> 
+  mutate(across(where(is.numeric), scale))
+multinomial_classification <- multinom(continental_region ~ ., 
+                                       data = training_scaled,
+                                       trace=FALSE)
+```
+
+A multinomial logistic regression predicts the probability of an observation belonging to each of the possible categories. For every observation all the probabilities of all the classes of the factor are estimated. Then, unless prompt otherwise the model assigns the observation to the class with the highest probability.
+
+```{r}
+predictions_multinomial <- predict(multinomial_classification, 
+                                   newdata=testing_scaled, 
+                                   type="class")
+cm_multinomial_classification <- confusionMatrix(predictions_multinomial,
+                                                 testing_scaled$continental_region)
+cm_multinomial_classification
+multinomial_classification$AIC
+```
+
+A simple multinomial logistic regression is already able to correctly classify around 95% of the observations as we see from the confusion matrix. Furthermore, the results seem robust, confirmed by a high Kappa, with a good equilibrium between sensitivity and specificity for all classes. The model only seems to have some difficulties for Northern Europe regions (the least represented class), often confusing them with Western Europe regions. This is understandable as these 2 subregions are probably fairly similar and with Northern Europe being the least represented class, the model might suffer from class imbalance and not learn accurately all the patterns for the scarcely represented classes.
+
+Below I print only the coefficients that were found significant at a 1% level:
+
+```{r, echo = FALSE}
+options(scipen = 999)
+```
+
+```{r}
+tidy(multinomial_classification) |> 
+  filter(p.value < 0.01) |> 
+  rename(coefficient = estimate) |> 
+  mutate(exp_coefficient = exp(coefficient), .before=std.error)  |> 
+  select(-c(statistic, std.error)) |> 
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+```
+
+```{r, echo=FALSE}
+options(scipen = 0)
+```
+
+The coefficients in the table above tell how each predictor variable influences the relative likelihood of being in a specific category (compared to the baseline category (i.e. Western Europe). For Eastern Europe, the biggest coefficient is `labour_productivity` with a negative sign indicating that as labour productivity increases, the log-odds of being in the Eastern region decrease and thus that Eastern Europe region tend to have lower `labour_productivity` than Western Europe's regions. For Northern Europe, the biggest coefficient is `age_adjusted_mortality_rate` with a positive sign indicating that for each 1 standard deviation increase of `age_adjusted_mortality_rate` the log-odds of being a Northern country with respect to being a Western country increase by 11.4.
+
+## LDA
+
+```{r}
+lda_classification <- lda(continental_region ~ ., data = training_scaled)
+predictions_lda <- predict(lda_classification, newdata=testing_scaled)$class
+cm_lda_classification <- confusionMatrix(predictions_lda, 
+                                         testing_scaled$continental_region)
+cm_lda_classification
+```
+
+LDA yields only slightly worse results than multinomial classification without improving the previous model in any way.
+
+## K Nearest Neighbor
+
+Since we already have a really good model accuracy seems like a good metric to maximize, therefore from now on I will do hyperparameter tuning choosing as the best model the one that maximizes the accuracy.
+
+Computational times do not allow to put very large grids for machine learning methods, however I have recursively defined several grids in each method before selecting the final most appropriate one in order to refine hyperparameters and improve predictions.
+
+```{r}
+param_grid = expand.grid(kmax = c(5, 10, 20), # Number of neighbors considered
+                         distance = c(0.5, 0.7, 0.9), # Parameter of Minkowski distance
+                         kernel = c("rectangular", "triangular")) # Kernel to use
+set.seed(123)
+knn_classification <- train(continental_region ~ .,
+                            data = training,
+                            method = "kknn",
+                            tuneGrid = param_grid,
+                            metric= "Accuracy",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+knn_classification$bestTune
+plot(knn_classification)
+```
+
+```{r}
+predictions_knn <- predict(knn_classification, 
+                           newdata=testing, 
+                           type="raw")
+cm_knn_classification <- confusionMatrix(predictions_knn, testing$continental_region)
+cm_knn_classification
+```
+
+KNN represents an improvement from previous models. Not only does the accuracy increase, but the model is also able to predict better Northern regions with a marked improvement of sensitivity for that class. In doing so also the Kappa (basically an accuracy score that also takes into account the possibility of being right by chance) increases. The good performance of KNN is also in line with it being an especially good model when having to classify geographic observations.
+
+```{r}
+knn_imp <- varImp(knn_classification)
+plot(knn_imp, top=5)
+```
+
+In line with what seen before with the coefficient of the multinomial, also for KNN one of the most important variables seems to be `age_adjusted_mortality_rate`. `electric_cars` and `population_exposure_to_pm2_5` seem also important.
+
+## Decision trees
+
+```{r, warning=FALSE}
+param_grid = expand.grid(cp = seq(0.05, 0.25, 0.02)) # Complexity Parameter
+set.seed(123)
+dt_classification <- train(continental_region ~ .,
+                           data = training,
+                           method = "rpart",
+                           tuneGrid = param_grid,
+                           metric= "Accuracy",
+                           preProcess = c("scale", "center"),
+                           trControl = ctrl)
+```
+
+The best hyperparameter was always the smallest here as it allows for more complexity. 0.05 allows for a nice visualization of a good number of nodes so I will stick to that.
+
+```{r}
+dt_classification$bestTune
+rpart.plot(dt_classification$finalModel, digits=3)
+```
+
+The visualization of this decision tree allows me to identify patterns across regions. For example Southern Europe regions seem to have lower `employment_to_population_ratio`, lower `age_adjusted_mortality_rate` and lower `fertility_rate` than the rest of the subregions. Western Europe regions on the other hand seem to have higher `employment_to_population_ratio` and higher pollution (`population_exposure_tp_pm2_5`).
+
+```{r}
+predictions_dt <- predict(dt_classification,
+                          newdata=testing, 
+                          type="raw")
+cm_dt_classification <- confusionMatrix(predictions_dt, testing$continental_region)
+cm_dt_classification
+```
+
+Because this is a single and simple tree results are a net worsening over KNN and even multinomial regression. Random forests and gradient boosting, by combining several trees should make for better predictions.
+
+## Random Forest
+
+```{r}
+param_grid = expand.grid(predFixed = seq(5, 15, 5), # Number of Randomly Selected Predictors
+                         minNode = seq(1, 10, 3)) # Minimal Node Size
+set.seed(123)
+rf_classification <- train(continental_region ~ .,
+                           data = training,
+                           method = "Rborist",
+                           tuneGrid = param_grid,
+                           metric= "Accuracy",
+                           trControl = ctrl,
+                           preProcess = c("scale", "center"),
+                           verbose = FALSE)
+```
+
+```{r}
+rf_classification$bestTune
+plot(rf_classification)
+```
+
+
+
+```{r}
+predictions_rf <- predict(rf_classification,
+                          newdata=testing, 
+                          type="raw")
+cm_rf_classification <- confusionMatrix(predictions_rf, testing$continental_region)
+cm_rf_classification
+```
+
+Random forests makes for a solid model, but like multinomial and unlike KNN it suffers in the underrepresented class (Northern Europe).
+
+```{r}
+rf_imp <- varImp(rf_classification)
+plot(rf_imp, top = 5)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Western",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Eastern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Northern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(rf_classification, pred.var = "employment_to_population_ratio",
+        which.class="Southern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+```
+
+Similarly to KNN and the decision tree above `population_exposure_to_pm2_5`, `age_adjusted_mortality_rate`, `employment_to_population_ratio` seem to be the relevant variables to set apart EU's regions
+
+Below 50% and above 75% the effect of `employment_to_population` its effect seems null across all regions. In between these percentages instead, there seems to be 2 different kind of patterns. It either decreases sharply (for Eastern and Southern) or increases sharply (for Western and Northern). This indicates that the likelihood of being a Southern or Eastern European regions decreases as `employment_to_population` increases between 50% and 75% and therefore on the contrary the likelihood of being either Western or Northern European region increases. This is line with higher unemployment and/or older populations for Southern/Eastern Europe.
+
+## Gradient Boosting
+
+```{r, warning=FALSE}
+param_grid = expand.grid(n.trees = c(200, 500), # Number of Boosting Iterations
+                         interaction.depth = c(5, 10),  # Max Tree Depth
+                         shrinkage = c(0.01, 0.1, 0.3), #Shrinkage
+                         n.minobsinnode = c(10, 20, 30)) # Min. Terminal Node Size
+set.seed(123)
+gb_classification <- train(continental_region ~ .,
+                           data = training,
+                           method = "gbm",
+                           tuneGrid = param_grid,
+                           metric= "Accuracy",
+                           trControl = ctrl,
+                           preProcess = c("scale", "center"),
+                           verbose = FALSE)
+```
+
+```{r}
+gb_classification$bestTune
+plot(gb_classification)
+```
+
+```{r}
+predictions_gb <- predict(gb_classification,
+                          newdata=testing, 
+                          type="raw")
+cm_gb_classification <- confusionMatrix(predictions_gb, testing$continental_region)
+cm_gb_classification
+```
+
+Gradient boosting performs only slightly worse than KNN, improving accuracy and sensitivity for Northern Europe regions with respect to random forests and multinomial logistic regression.
+
+```{r}
+gb_imp <- varImp(gb_classification)
+plot(gb_imp, top = 5)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Western",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Eastern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Northern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "age_adjusted_mortality_rate",
+        which.class="Southern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Western",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Eastern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Northern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+partial(gb_classification, pred.var = "population_exposure_to_pm2_5",
+        which.class="Southern",
+        plot = TRUE, prob=TRUE, rug = TRUE)
+```
+
+A lot of emphasis seems to be put on `age_adjusted_mortality_rate` for gradient boosting. This and most of the remaining important variables are in line with the previous models. 
+
+Lower `age_adjusted_mortality_rate` seems to be associated with a higher likelihood of being  either Southern Europe or Western Europe, while increases (within a certain range) of `age_adjusted_mortality_rate` seem to lead to an increase of likelihood of being a Eastern or Northern European region.
+
+An increase in `population_exposure_to_pm2_5` seem to be associated quite linearly with higher likelihood of being a Eastern European region, while for the rest of the regions the relationship presents sudden drop with Northern and Southern European countries seemingly associated with lower pollution levels.
+
+## Summary
+
+```{r}
+models_abbr <- c("benchmark", "multinomial", "lda", "knn", "dt", "rf", "gb")
+models_name <- c("Benchmark", "Multinomial", "LDA", "KNN", "Decision Tree", 
+                "Random Forest", "Gradient Boosting")
+
+# Create an empty tibble to store results
+performance_results <- tibble()
+
+# For loop to extract AIC, Accuracy, and Kappa for each model
+for (i in 1:length(models_abbr)) {
+  
+  # Get the current model and its name
+  model_abbr <- models_abbr[i]
+  model_name <- models_name[i]
+  
+  # Get the confusion matrix for the model
+  cm_name <- paste0("cm_", model_abbr, "_classification")
+  cm <- get(cm_name)  
+
+  # Extract Accuracy and Kappa
+  accuracy <- cm$overall["Accuracy"]
+  kappa <- cm$overall["Kappa"]
+  f1_scores <- cm$byClass[, 'F1']
+  
+  # Storing in a tibble all the F1 scores for all categories
+  f1_df <- as_tibble_row(f1_scores) %>%
+    rename_with(~ gsub("Class: ", "F1-", .))
+  
+  model_results <- tibble(Model = model_name, 
+                          Accuracy = accuracy,
+                          Kappa = kappa) %>% 
+                          bind_cols(f1_df)
+  
+  # Store the results in the tibble
+  performance_results <- bind_rows(performance_results,
+                                   model_results)
+}
+
+performance_results
+```
+
+The best overall model for my classification task seems to be K-Nearest-Neighbor, followed closely by gradient boosting. Random forests, LDA and multinomial logistic regressions all provide really solid predictions, but tend to have more difficulties in the least represented class of Northern Europe.
+
+The variables that allowed the models to tell the regions apart were almost always the same across all models with factors like lower employment to population ratio and lower age-adjusted mortality rate associated with Southern Europe, higher employment to population rate and less pollution for Northern Europe regions.
+
+# Regression
+
+The structure of the sections below will be similar to that adopted for the classification models.
+
+When cross validation will be applied, the best model will be selected as the one that minimizes the Root Mean Squared Error.
+
+## Preparation
+
+I need to split the data one more time. Again 70% of our observations will make up my training set, while the remaining 30% will be my testing set.
+
+```{r}
+set.seed(123)
+in_train <- createDataPartition(imputed_df$gross_domestic_product, p = 0.7, list = FALSE) 
+training <- imputed_df[ in_train,]
+testing <- imputed_df[-in_train,]
+```
+
+```{r}
+nrow(training)
+nrow(testing)
+```
+
+## Setting the control function
+
+3 fold cross validation due to computational times.
+
+```{r}
+ctrl <- trainControl(method = "cv", 
+                     number = 3,
+                     summaryFunction = defaultSummary,
+                     returnResamp = "final",
+                     savePredictions = "final",
+                     verboseIter = F)
+```
+
+## Benchmark
+
+Predicting every region with the mean GDP of all observations.  
+
+```{r}
+benchmark_regression <- lm(gross_domestic_product ~ 1, data=training)
+summary(benchmark_regression)
+predictions_benchmark <- predict(benchmark_regression,
+                                 newdata=testing)
+round(postResample(pred = predictions_benchmark,  obs = testing$gross_domestic_product),3)
+```
+
+## Linear regression
+
+```{r}
+training_scaled <- training |> 
+  mutate(across(where(is.numeric), scale))
+testing_scaled <- testing |> 
+  mutate(across(where(is.numeric), scale))
+linear_regression <- lm(gross_domestic_product ~ ., data=training_scaled)
+```
+
+```{r}
+tidy(linear_regression) |> 
+  select(-c(statistic, std.error)) |> 
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  print(n = Inf)
+```
+
+Most of the variables are significant. The most important (the one with the biggest coefficient) seems to be by far `labour_productivity`, with higher `labour_productivity` leading to higher `gross_domestic_product`.
+
+```{r}
+AIC(linear_regression)
+predictions_linear <- predict(linear_regression,
+                              newdata=testing_scaled)
+round(postResample(pred = predictions_linear,  
+                   obs = testing_scaled$gross_domestic_product),3)
+```
+
+A simple linear model is already able to explain 84% of the variability of my target variable. Note that for this model MAE and RMSE are scaled and need to be unscaled for proper interpretation.
+
+## Stepwise feature selection
+
+To make sure that I am not including too many features in my model I run a stepwise regression choosing the best model based on the AIC score.
+
+```{r, warning=FALSE}
+stepwise_regression <- ols_step_both_aic(linear_regression)
+stepwise_regression
+```
+
+The stepwise is able to reduce the AIC from the previous 833 to 828, a marginal improvement. Indeed, also the stepwise is including basically all my predictors (17 out of 20). The only variables excluded are those relating to risks of flooding, `unemployment` and `net_interregional_mobility`. The most important variable seem to be `labour_productivity`, `hospital_beds` and `patents`.
+
+I now repeat the same process using `caret::train`, but now focsuing on minimizing the RMSE.
+
+```{r}
+# Dummifying continental_region
+training_dummies <- dummy_cols(training, select_columns = "continental_region",
+                               remove_selected_columns = TRUE)
+# Remove one of the dummy columns
+training_dummies <- training_dummies[, !colnames(training_dummies) %in%
+                                       c("continental_region_Western")]
+# Same for testing
+testing_dummies <- dummy_cols(testing, select_columns = "continental_region",
+                              remove_selected_columns = TRUE)
+testing_dummies <- testing_dummies[, !colnames(training_dummies) %in%
+                                       c("continental_region_Western")]
+param_grid = expand.grid(nvmax = seq(1, 20, 1)) # Maximum Number of Predictors
+set.seed(123)
+caret_sw_regression <- train(gross_domestic_product ~ .,
+                            data = training_dummies,
+                            method = "leapSeq",
+                            tuneGrid = param_grid,
+                            metric= "RMSE",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+caret_sw_regression$bestTune
+plot(caret_sw_regression)
+```
+
+The best model is again one with 17 predictors.
+
+```{r}
+best_model_size <- caret_sw_regression$bestTune$nvmax
+coef(caret_sw_regression$finalModel, id = best_model_size)
+```
+
+The predictors are almost exactly the same as for the stepwisie minimizing AIC.
+
+```{r}
+predictions_caret_sw <- predict(caret_sw_regression,
+                                newdata=testing_dummies)
+round(postResample(pred = predictions_caret_sw,  
+                   obs = testing_dummies$gross_domestic_product),3)
+```
+
+The R-squared is a slight improvement over the linear regression without any feature selection.
+
+## Elastic-Net
+
+I now apply shrinkage methods, in particular using cross validation for hyperparameter tuning of an elastic net model.
+
+```{r}
+param_grid = expand.grid(alpha = seq(0, 1, 0.1), # Mixing Percentage
+                         lambda = seq(1, 100, 1)) # Regularization Parameter
+set.seed(123)
+elnet_regression <- train(gross_domestic_product ~ .,
+                            data = training_dummies,
+                            method = "glmnet",
+                            tuneGrid = param_grid,
+                            metric= "RMSE",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+elnet_regression$bestTune
+plot(elnet_regression)
+```
+
+`alpha = 1` indicates that this is basically a Lasso regression.
+
+```{r}
+coef(elnet_regression$finalModel, s=elnet_regression$bestTune$lambda)
+```
+
+It seems like the model is actually not performing any kind of feature selection. It is keeping all the variables. The variables with the biggest coefficients are again `labour_productivity` and `hospital_beds`.
+
+```{r}
+predictions_elnet <- predict(elnet_regression,
+                             newdata=testing_dummies)
+round(postResample(pred = predictions_elnet,  
+                   obs = testing_dummies$gross_domestic_product),3)
+```
+
+The R-squared is another slight improvement over stepwise linera regression and simple linear regression. Also MAE and RMSE are lower for this ElasticNet model than for the stepwise model.
+
+## K Nearest Neighbor
+
+As many if not most of the variables seem relevant for the predictions I will keep using all of them also for the machine learning methods.
+
+```{r}
+param_grid = expand.grid(kmax = c(3, 5, 7, 9, 11), # Number of neighbors considered
+                         distance = c(0.7, 0.9), # Parameter of Minkowski distance
+                         kernel = c("rectangular", "triangular", "optimal")) # Kernel to use
+set.seed(123)
+knn_regression <- train(gross_domestic_product ~ .,
+                            data = training,
+                            method = "kknn",
+                            tuneGrid = param_grid,
+                            metric= "RMSE",
+                            trControl = ctrl,
+                            preProcess = c("scale", "center"),
+                            verbose = FALSE)
+```
+
+```{r}
+knn_regression$bestTune
+plot(knn_regression)
+```
+
+```{r}
+predictions_knn <- predict(knn_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_knn,  obs = testing$gross_domestic_product),3)
+```
+
+KNN does not seem a good choice for this prediction problem.
+
+```{r}
+knn_imp <- varImp(knn_regression)
+plot(knn_imp, top=10)
+
+partial(knn_regression, pred.var = "labour_productivity", 
+        plot = TRUE, rug = TRUE)
+```
+
+`labour_productivity` is again the top predictor. It seems to have mainly a positive linear relationship with `gross_domestic_product` as we would expect given the definition of the variable. This relationship seems to become less relevant and flat after a certain threshold.
+
+## Decision trees
+
+```{r, warning=FALSE}
+param_grid = expand.grid(cp = seq(0.05, 0.25, 0.02)) # Complexity Parameter
+set.seed(123)
+dt_regression <- train(gross_domestic_product ~ .,
+                           data = training,
+                           method = "rpart",
+                           tuneGrid = param_grid,
+                           metric= "RMSE",
+                           preProcess = c("scale", "center"),
+                           trControl = ctrl)
+```
+
+The best hyperparameter was always the smallest here as it allows for more complexity. 0.05 however allows for a nice visualization of a good number of nodes so I will stick to that
+
+```{r}
+dt_regression$bestTune
+rpart.plot(dt_regression$finalModel, digits=3)
+```
+
+All of the splits happen on either the variable `labour_productivity`, `patents` or `hospital_beds` further confirming that this are the three most important variables for our regression models part. Indeed `labour_productivity` has a direct relationship with GDP and `hospital_beds` and `patents` can be considered two good proxy for it as well.
+
+```{r}
+predictions_dt <- predict(dt_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_dt,  obs = testing$gross_domestic_product),3)
+```
+
+The predictive power of this model is low because it is made up of just one and simple decision tree. This predictive power should increase in random forests and gradient boosting.
+
+## Random Forest
+
+```{r}
+param_grid = expand.grid(predFixed = seq(10, 20, 5), # Number of Randomly Selected Predictors
+                         minNode = seq(3, 7, 1)) # Minimal Node Size
+set.seed(123)
+rf_regression <- train(gross_domestic_product ~ .,
+                       data = training,
+                       method = "Rborist",
+                       tuneGrid = param_grid,
+                       metric= "RMSE",
+                       preProcess = c("scale", "center"),
+                       trControl = ctrl,
+                       verbose = FALSE)
+```
+
+```{r}
+rf_regression$bestTune
+plot(rf_regression)
+```
+
+20 predictors (basically the whole dataset) seems to be constantly better than less predictors. Further confirming that all my variables are relevant in the prediction process.
+
+```{r}
+predictions_rf <- predict(rf_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_rf,  
+                   obs = testing$gross_domestic_product),3)
+```
+
+The prediction power of random forest increase significantly compared to the single decision tree. However, it does not reach the predictive power of the linear models having lower R-squared and higher MAE and RMSE.
+
+```{r}
+rf_imp <- varImp(rf_regression)
+plot(rf_imp, top=10)
+
+partial(rf_regression, pred.var = "labour_productivity", 
+        plot = TRUE, rug = TRUE)
+partial(rf_regression, pred.var = "patents", 
+        plot = TRUE, rug = TRUE)
+```
+
+`labour_productivity` has a very similar pattern as the one that was found for KNN. This time seems even more linear. `patents` instead shows a sudden increase, but still a positive relationship with the target variable (i.e. more patents more GDP).
+
+## Gradient Boosting
+
+```{r, warning=FALSE}
+param_grid = expand.grid(n.trees = c(300, 500, 700), # Number of Boosting Iterations
+                         interaction.depth = c(10, 20, 30),  # Max Tree Depth
+                         shrinkage = c(0.001, 0.01, 0.1), # Shrinkage
+                         n.minobsinnode = c(2, 5, 10)) # Min. Terminal Node Size
+set.seed(123)
+gb_regression <- train(gross_domestic_product ~ .,
+                       data = training,
+                       method = "gbm",
+                       tuneGrid = param_grid,
+                       metric= "RMSE",
+                       trControl = ctrl,
+                       preProcess = c("scale", "center"),
+                       verbose = FALSE)
+```
+
+```{r}
+gb_regression$bestTune
+plot(gb_regression)
+```
+
+```{r}
+predictions_gb <- predict(gb_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_gb,  obs = testing$gross_domestic_product),3)
+```
+
+The predictive power of the gradient boosting model is greater than that of the random forest (gradient boosting is better in across all metrics), but it seems slightly worse than Elastic Net. Gradient boosting has a lower R squared (0.81 vs 0.85) and higher RMSE, however it has the lowest mean absolute error by far. The lower MAE suggests that gradient boosting makes fewer large mistakes, but on the other hand, that it does not understand the dataset as well as the linear regression which explain a higher proportion of variability. 
+
+```{r}
+gb_imp <- varImp(gb_regression)
+plot(gb_imp, top=10)
+
+partial(gb_regression, pred.var = "labour_productivity", 
+        plot = TRUE, rug = TRUE)
+partial(gb_regression, pred.var = "patents", 
+        plot = TRUE, rug = TRUE)
+partial(gb_regression, pred.var = "hospital_beds", 
+        plot = TRUE, rug = TRUE)
+```
+
+The top predictors are always the same, constant across all models.
+
+Even the relationship between `labour_productivity` and `gross_domestic_product` is akin to that of previous models, suggesting that `labour_productivity` has a strong positive linear relationship to GDP up to a certain threshold where after that it is no longer able to explain further increases in GDP.
+
+Patents' partial dependency plot is really similar to the random forest one, showing a steep increase for low values of `patents`.
+
+Lastly, also `hospital_beds` has a positive linear relationship with `gross_domestic_product`up to a certain threshold, showing that a higher number of beds in an hospital is a good predictor of higher GDP.
+
+Notably the scale of the y-axis for `labour_productivity` is way longer than for the rest of the measures, suggesting even more that this variable is the main predictor of GDP as it is able to explain much more of its variability than the rest of the variables.
+
+## Neural Network
+
+```{r, warning=FALSE}
+param_grid = expand.grid(layer1 = c(4, 2),
+                         layer2 = c(2, 1, 0),
+                         layer3 = c(0)) # Layers neural network
+set.seed(123)
+nn_regression <- train(gross_domestic_product ~ .,
+                       data = training,
+                       method = "neuralnet",
+                       tuneGrid = param_grid,
+                       metric= "RMSE",
+                       trControl = ctrl,
+                       preProcess = c("scale", "center"))
+```
+
+```{r}
+nn_regression$bestTune
+```
+
+This neural network has 4 nodes in the first layer, but just 1 layer.
+
+```{r}
+predictions_nn <- predict(nn_regression,
+                           newdata=testing,
+                           type="raw")
+round(postResample(pred = predictions_nn,  
+                   obs = testing$gross_domestic_product),3)
+```
+This neural network is incredibly bad at predicting. The MAE and RMSE are actually the same as the mean based benchmark indicating that this neural network is likely returning a simple average.
+
+This confirms that neural network are not the best for small datasets of tabular data, with simple relationships.
+
+## Summary
+
+```{r}
+summary <- bind_rows(round(postResample(pred = predictions_benchmark,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_linear,  
+                             obs = testing_scaled$gross_domestic_product),3),
+          round(postResample(pred = predictions_caret_sw,  
+                             obs = testing_dummies$gross_domestic_product),3),
+          round(postResample(pred = predictions_elnet,    
+                             obs = testing_dummies$gross_domestic_product),3),
+          round(postResample(pred = predictions_knn,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_dt,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_rf,  
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_gb, 
+                             obs = testing$gross_domestic_product),3),
+          round(postResample(pred = predictions_nn,  
+                             obs = testing$gross_domestic_product),3))
+
+sigma_gdp <- sd(training$gross_domestic_product)
+
+summary <- summary |> 
+  mutate(
+    # Unscale RMSE only for the second row
+    RMSE = ifelse(row_number() == 2, RMSE * sigma_gdp, RMSE),
+    # Unscale MAE only for the second row
+    MAE = ifelse(row_number() == 2, MAE * sigma_gdp, MAE))
+
+Model <- c("Benchmark", "Linear Regression", "Stepwise", 
+           "Elastic Net", "KNN", "Decision Tree", 
+           "Random Forest", "Gradient Boosting", "Neural Network")
+
+summary <- cbind(Model, summary)
+summary
+```
+
+The best overall underlying model seem to be the linear model, followed closely by gradient boosting. As discussed above gradient boosting has a lower MAE but higher R-squared and RMSE.
+
+To build my ensemble I will use Elastic-Net (the best out of the linear models), gradient boosting and random forest, which are the three type of models that provide the best predictions.
+
+## Ensemble
+
+```{r}
+ensemble_pred <- (predictions_elnet + predictions_gb + predictions_rf)/3
+
+round(postResample(pred = ensemble_pred, 
+                   obs = testing$gross_domestic_product),3)
+```
+
+The R-squared of the ensemble is good, almost as high as any of the individual models. The MAE is actually lower than any other individual model suggesting that the right models were picked and highlighting the utility of building an ensemble combining predictions from different models.
+
+### Predictions vs actual
+
+Below are printed the 5 regions that were predicted best and the 5 regions that were predicted worst. 
+
+```{r}
+testing_regions <- char_col[-in_train,]
+final_table <- tibble(
+  region = testing_regions$region_name,
+  country = testing_regions$country_name,
+  continental_region = testing_regions$continental_region,
+  predictions = ensemble_pred,
+  actual = testing$gross_domestic_product,
+  error = predictions - actual
+)
+
+head(final_table |> arrange(abs(error)))
+tail(final_table |> arrange(abs(error)))
+```
+
+I will now make a graph to analyze patterns within my residuals:
+
+```{r}
+options(scipen = 999)
+ggplot(final_table, aes(x = actual, y = predictions, color = continental_region)) +
+  geom_point(alpha = 0.7, size = 3) + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") + 
+  labs(
+    title = "Actual vs. Predicted GDP",
+    x = "Actual GDP",
+    y = "Predicted GDP",
+    color = "Continental Region"
+  ) +
+  theme_minimal()
+```
+
+It seems like the ensemble is able to predict fairly well in all the subregions  of Europe. Struggling only with outliers for extreme values of `gross_domestic_product`.
+
+## Prediction interval
+
+Building and plotting prediction intervals:
+
+```{r}
+error <- testing$gross_domestic_product - ensemble_pred
+noise <- error[1:100]
+lwr <- ensemble_pred[101:length(ensemble_pred)] + quantile(noise,0.05, na.rm=T)
+upr <- ensemble_pred[101:length(ensemble_pred)] + quantile(noise,0.95, na.rm=T)
+predictions <- tibble(actual = testing$gross_domestic_product[101:length(testing$gross_domestic_product)],
+                      fit = ensemble_pred[101:length(ensemble_pred)], 
+                      lwr = lwr, 
+                      upr = upr,
+                      continental_region = testing_regions$continental_region[101:length(testing_regions$continental_region)])
+predictions <- predictions |> mutate(out = factor(if_else(actual<lwr | actual>upr,1,0)))
+
+mean(predictions$out==1)
+ggplot(predictions, aes(x = fit, y = actual))+
+  geom_point(aes(color = continental_region)) + 
+  theme_minimal() +
+  geom_ribbon(data = predictions, aes(ymin = lwr, ymax = upr), alpha=0.3) +
+  labs(title = "Prediction intervals", x = "Predicted GDP",y = "Actual GDP")
+```
+
+Basically all the observations in the testing set would actually fall within the predicted interval, with only few of them falling just outside.
+
+This further confirm the robustness and validity of the models I have built and then combined in the final ensemble.
+
+# Final thoughts
+
+Throughout this document I have built and then analyzed several classification and logistic models. The classification models aimed at classifying my observations into their continental subregion (Eastern, Western, Northern or Southern Europe). The regression models aimed at predicting GDP per capita of the NUTS-3 regions of the EU.
+
+Even if limited by time and computational power during model training, I was able to obtain good predictive models. Across most of the models the variables that were the most important for prediction were constantly the same. These variables also where coherent with common knowledge and/or academic literature on the topic. For example Southern Europe seemed characterized by lower age adjusted mortality rate and lower employment, while Northern Europe regions tended to be less characterized by pollution. Labour productivity was found to be an important predictor of GDP, but important proxies also seemed to be the number of hospital beds and the number of patents' applications.
+
+It is also worth mentioning that although I have not applied any logarithmic transformation since most machine learning methods do not specifically need that, some of my variables are severely skewed and this could have further helped predictions especially for statistical learning methods.
+
+Overall the excercise was a good learning process that allowed me to implement many different models, compare them, understand their strength and weaknesses and interpret their results.
+
