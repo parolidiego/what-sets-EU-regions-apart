@@ -7,7 +7,7 @@
 
         <meta name="author" content="Diego Paroli" />
     
-        <meta name="date" content="2025-03-20" />
+        <meta name="date" content="2025-03-28" />
     
     <title>What sets European regions apart?</title>
 
@@ -1569,7 +1569,7 @@ margin-left: 0 !important;
           <li class="divider"></li>
                                 <li><span><i class="glyphicon glyphicon-user"></i> Diego
 Paroli</span></li>
-                                         <li><span><i class="glyphicon glyphicon-calendar"></i> 2025-03-20</span></li>
+                                         <li><span><i class="glyphicon glyphicon-calendar"></i> 2025-03-28</span></li>
                   </ul>     
       </div>
       <div class="book-body fixed">
@@ -1625,7 +1625,7 @@ to:</p>
 <p>All the data used is at the third regional level (corresponding to
 the EU’s NUTS-3 level), and it is obtained from <a href="https://data-explorer.oecd.org/">OECD</a> databases which seemed
 the source with the most data available for level-3 regions.</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># data &lt;- request(&quot;https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...LAND_AREA+POP...?startPeriod=2010&amp;endPeriod=2022&amp;dimensionAtObservation=AllDimensions&amp;format=csvfilewithlabels&quot;) |&gt; req_perform()</span></span>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># data &lt;- request(&quot;https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...POP._T._T.PS_KM2+PS?startPeriod=2010&amp;endPeriod=2022&amp;dimensionAtObservation=AllDimensions&amp;format=csvfilewithlabels&quot;) |&gt; req_perform()</span></span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co"># writeBin(resp_body_raw(data), &quot;data/population.csv&quot;)</span></span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>population <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;data/population.csv&quot;</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>)</span>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a></span>

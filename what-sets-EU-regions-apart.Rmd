@@ -42,8 +42,8 @@ library(fastDummies)
 All the data used is at the third regional level (corresponding to the EU's NUTS-3 level), and it is obtained from [OECD](https://data-explorer.oecd.org/) databases which seemed the source with the most data available for level-3 regions.
 
 ```{r}
-data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...POP._T._T.PS_KM2+PS?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
-writeBin(resp_body_raw(data), "data/population.csv")
+# data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...POP._T._T.PS_KM2+PS?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
+# writeBin(resp_body_raw(data), "data/population.csv")
 population <- read_csv("data/population.csv", show_col_types = FALSE)
 
 # data <- request("https://sdmx.oecd.org/public/rest/data/OECD.CFE.EDS,DSD_REG_DEMO@DF_DEMO,2.0/A.TL3...DEPEND_RATIO+FERT_RATIO...?startPeriod=2010&endPeriod=2022&dimensionAtObservation=AllDimensions&format=csvfilewithlabels") |> req_perform()
